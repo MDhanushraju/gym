@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Environment Variables & Secrets (CRITICAL)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.env
+
+# Production Build
+dist/
+build/
+
+# IDE & OS
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Local reference test artifacts, caches & debug dumps
+*.log
+.matplotlib/
+__pycache__/
+*.pyc
+debug_*.js
+test_geom.py
+inspect_curve.py
+analyze_signals.py
+pushup_5reps_signal_plot.png
+user_pushup_landmarks.json
+extracted_frames_2/
+/pose_landmarker_lite.task
+test_user_replay.js

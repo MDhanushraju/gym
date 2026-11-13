@@ -1,0 +1,99 @@
+{
+  "clips": [
+    {
+      "video": "squat_ref_1_side.mp4",
+      "width": 576,
+      "height": 1280,
+      "fps": 23.825564287447627,
+      "total_frames": 312,
+      "pose_frames": 312,
+      "aspect": 0.45,
+      "standing_hip_y": 0.4416934782608695,
+      "leg_len": 0.2152,
+      "femur_len": 0.115,
+      "torso_len": 0.1572,
+      "reps": [
+        {
+          "start_i": 64,
+          "bottom_i": 189,
+          "end_i": 300,
+          "start_t": 2.686,
+          "bottom_t": 7.933,
+          "end_t": 12.592,
+          "peak_descent": 1.021
+        }
+      ]
+    },
+    {
+      "video": "squat_ref_2_youtube.mp4",
+      "width": 854,
+      "height": 480,
+      "fps": 23.976023976023978,
+      "total_frames": 3008,
+      "pose_frames": 2023,
+      "aspect": 1.7791666666666666,
+      "standing_hip_y": 0.33715577557755777,
+      "leg_len": 0.5158,
+      "femur_len": 0.3221,
+      "torso_len": 0.5094,
+      "reps": [
+        {
+          "start_i": 25,
+          "bottom_i": 292,
+          "end_i": 641,
+          "start_t": 13.305,
+          "bottom_t": 25.609,
+          "end_t": 45.837,
+          "peak_descent": 0.63
+        },
+        {
+          "start_i": 700,
+          "bottom_i": 736,
+          "end_i": 955,
+          "start_t": 48.382,
+          "bottom_t": 49.883,
+          "end_t": 59.268,
+          "peak_descent": 0.602
+        },
+        {
+          "start_i": 958,
+          "bottom_i": 975,
+          "end_i": 979,
+          "start_t": 59.393,
+          "bottom_t": 60.102,
+          "end_t": 60.31,
+          "peak_descent": 0.561
+        },
+        {
+          "start_i": 986,
+          "bottom_i": 1051,
+          "end_i": 1184,
+          "start_t": 60.644,
+          "bottom_t": 64.523,
+          "end_t": 70.153,
+          "peak_descent": 0.642
+        },
+        {
+          "start_i": 1205,
+          "bottom_i": 1706,
+          "end_i": 1854,
+          "start_t": 71.947,
+          "bottom_t": 92.926,
+          "end_t": 111.236,
+          "peak_descent": 1.238
+        }
+      ]
+    }
+  ],
+  "template_summary": {
+    "rep_count": 6,
+    "video_count": 2,
+    "low_sample_size": true,
+    "phases": [
+      "STANDING",
+      "MID_DESCENT",
+      "BOTTOM",
+      "MID_ASCENT"
+    ]
+  }
+}
