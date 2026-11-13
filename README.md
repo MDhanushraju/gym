@@ -1,5 +1,8 @@
 # FormFit – A Smarter, Calmer Fitness Experience
 
+[![Deploy to GitHub Pages](https://github.com/MDhanushraju/gym/actions/workflows/deploy.yml/badge.svg)](https://github.com/MDhanushraju/gym/actions/workflows/deploy.yml)
+**Live Demo:** [https://MDhanushraju.github.io/gym/](https://MDhanushraju.github.io/gym/)
+
 **FormFit** is a peaceful, natural, and premium fitness companion designed to transform exercise from an intimidating chore into a calm, mindful movement habit. It combines **computer vision movement analysis (MediaPipe)** with **Apple Fitness and Scandinavian wellness aesthetics**, offering real-time postural guidance with zero cloud latency and 100% on-device privacy.
 
 ---

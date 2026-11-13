@@ -44,12 +44,15 @@ export async function initPoseLandmarker() {
   initFailed = false;
   lastInitError = null;
 
+  const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+  const cleanBase = base.endsWith('/') ? base : `${base}/`;
+
   // Configurations to attempt: local first, then CDN
   const configs = [
     {
       name: 'Local /public bundle',
-      wasmPath: '/wasm',
-      modelPath: '/models/pose_landmarker_lite.task'
+      wasmPath: `${cleanBase}wasm`,
+      modelPath: `${cleanBase}models/pose_landmarker_lite.task`
     },
     {
       name: 'CDN Fallback',

@@ -310,7 +310,7 @@ export function clearCustomSquatTemplate() {
   } catch (e) {}
 }
 
-export async function loadSquatTemplate(url = '/reference/squat_template.json') {
+export async function loadSquatTemplate(url = null) {
   // 1. Check if user has uploaded a custom reference template
   const custom = getCustomSquatTemplate();
   if (custom) {
@@ -320,8 +320,12 @@ export async function loadSquatTemplate(url = '/reference/squat_template.json') 
 
   if (cachedTemplate) return cachedTemplate;
 
+  const base = (typeof import.meta !== 'undefined' && import.meta.env?.BASE_URL) || '/';
+  const cleanBase = base.endsWith('/') ? base : `${base}/`;
+  const targetUrl = url || `${cleanBase}reference/squat_template.json`;
+
   try {
-    const res = await fetch(url);
+    const res = await fetch(targetUrl);
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     cachedTemplate = await res.json();
     return cachedTemplate;
