@@ -8,8 +8,8 @@
 // Test F: Multiple complete push-ups in sequence (Valid reps = exact count)
 // Test G: Fast push-up and slow push-up (Both counted accurately, no double counting)
 
-import { FormantiExerciseEngine, ExerciseStates } from '../src/utils/stateMachine.js';
-import { PushUpValidator } from '../src/utils/exerciseValidators.js';
+import { FormantiExerciseEngine, ExerciseStates } from '../frontend/src/utils/stateMachine.js';
+import { PushUpValidator } from '../frontend/src/utils/exerciseValidators.js';
 
 function createMockPushUpLandmarks({
   shoulderY = 0.45,

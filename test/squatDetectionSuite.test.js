@@ -6,7 +6,7 @@
  */
 
 // Use dynamic import for ES module
-import('../src/utils/pureSquatEngine.js').then(({ PureSquatEngine, SquatStates }) => {
+import('../frontend/src/utils/pureSquatEngine.js').then(({ PureSquatEngine, SquatStates }) => {
 
   let passed = 0;
   let failed = 0;

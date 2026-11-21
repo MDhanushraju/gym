@@ -5,7 +5,7 @@
  * translation/scale/proportion invariance, and quantitative form scoring.
  */
 
-import { SquatTemplateEngine } from '../src/utils/squatTemplateEngine.js';
+import { SquatTemplateEngine } from '../frontend/src/utils/squatTemplateEngine.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

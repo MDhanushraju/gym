@@ -13,9 +13,9 @@
 // 11. Incomplete arm extension must not count as a valid repetition.
 // 12. Temporary landmark loss must not create false repetitions.
 
-import { PushUpValidator } from '../src/utils/exerciseValidators.js';
-import { evaluateCameraCalibration } from '../src/utils/poseCalibration.js';
-import { FormantiExerciseEngine, ExerciseStates } from '../src/utils/stateMachine.js';
+import { PushUpValidator } from '../frontend/src/utils/exerciseValidators.js';
+import { evaluateCameraCalibration } from '../frontend/src/utils/poseCalibration.js';
+import { FormantiExerciseEngine, ExerciseStates } from '../frontend/src/utils/stateMachine.js';
 
 function createMockLandmarks(overrides = {}) {
   // Base 33 MediaPipe pose landmarks

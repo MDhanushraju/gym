@@ -90,6 +90,10 @@ Keep the tone encouraging, calm, and professional.`;
 export default defineConfig({
   base: process.env.NODE_ENV === 'production' ? '/gym/' : '/',
   plugins: [react(), openAiCoachPlugin()],
+  build: {
+    outDir: '../dist',
+    emptyOutDir: true
+  },
   server: {
     port: 5173,
     host: true

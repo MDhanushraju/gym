@@ -2,7 +2,7 @@
 // Automated verification for Skeleton Canvas Overlay Minimalization and Clearing
 
 import assert from 'assert';
-import { drawSkeletonOnCanvas, generateTargetGhostLandmarks } from '../src/utils/skeletonRenderer.js';
+import { drawSkeletonOnCanvas, generateTargetGhostLandmarks } from '../frontend/src/utils/skeletonRenderer.js';
 
 console.log('=== SKELETON CANVAS OVERLAY VERIFICATION SUITE ===\n');
 

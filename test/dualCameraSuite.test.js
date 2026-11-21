@@ -16,8 +16,8 @@ import {
   generateSessionCode, 
   isValidSessionCode 
 } from '../backend/server.js';
-import { PoseSynchronizer } from '../src/utils/poseSynchronizer.js';
-import { PureSquatEngine } from '../src/utils/pureSquatEngine.js';
+import { PoseSynchronizer } from '../frontend/src/utils/poseSynchronizer.js';
+import { PureSquatEngine } from '../frontend/src/utils/pureSquatEngine.js';
 
 console.log('\n============================================================');
 console.log('   SYNCHRONIZED TWO-DEVICE CAMERA SUITE');

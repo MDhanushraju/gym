@@ -8,7 +8,7 @@
  * TEST 4: user_recorded_pushup.json -> Asserts real recording is calibrated and verified
  */
 
-import { PurePushupEngine } from '../../src/utils/purePushupEngine.js';
+import { PurePushupEngine } from '../../frontend/src/utils/purePushupEngine.js';
 import fs from 'fs';
 import path from 'path';
 

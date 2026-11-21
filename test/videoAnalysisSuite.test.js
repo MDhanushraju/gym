@@ -9,10 +9,10 @@
 // TEST 7: Poor lighting / hidden landmarks -> Visibility/confidence warning, no fabricated scores
 // TEST 8: Dashboard controls & data integrity
 
-import { classifyExerciseFromLandmarks } from '../src/utils/exerciseClassifier.js';
-import { FormantiExerciseEngine, ExerciseStates } from '../src/utils/stateMachine.js';
-import { generateKinematicLandmarks } from '../src/utils/poseDetection.js';
-import { getExerciseValidator } from '../src/utils/exerciseValidators.js';
+import { classifyExerciseFromLandmarks } from '../frontend/src/utils/exerciseClassifier.js';
+import { FormantiExerciseEngine, ExerciseStates } from '../frontend/src/utils/stateMachine.js';
+import { generateKinematicLandmarks } from '../frontend/src/utils/poseDetection.js';
+import { getExerciseValidator } from '../frontend/src/utils/exerciseValidators.js';
 
 function createMockFrameSequence(exerciseId, numReps = 3, options = {}) {
   const frames = [];
