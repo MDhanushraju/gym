@@ -16,6 +16,7 @@ export default function DualCameraPairModal({
 }) {
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [copied, setCopied] = useState(false);
+  const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
   // Generate join URL for phone #2
   const joinUrl = typeof window !== 'undefined'
@@ -74,10 +75,19 @@ export default function DualCameraPairModal({
         </div>
 
         {/* Instructions */}
-        <p className="text-xs text-[#696C92] mb-6 leading-relaxed">
+        <p className="text-xs text-[#696C92] mb-4 leading-relaxed">
           Position your second phone behind you to monitor spine lateral tilt, scapular retraction, and lumbar alignment.
           MediaPipe runs locally on both devices — <strong>no video is ever transmitted</strong>.
         </p>
+
+        {isLocalhost && (
+          <div className="mb-4 p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] leading-relaxed flex items-start gap-2">
+            <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <div>
+              <strong>Localhost Notice:</strong> Your phone cannot reach <code>localhost</code>. To test between two devices on the same Wi-Fi, open this app on your computer using your network IP (e.g. <code>http://192.168.0.105:5173</code>) or use your hosted GitHub Pages URL.
+            </div>
+          </div>
+        )}
 
         {/* QR Code & Join Code Section */}
         <div className="bg-[#FAF9FF] p-5 rounded-2xl border border-[#EDE9FE] mb-6 flex flex-col sm:flex-row items-center gap-6 justify-center">
