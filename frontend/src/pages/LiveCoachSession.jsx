@@ -1659,19 +1659,24 @@ export default function LiveCoachSession({
                 {showSkeleton ? 'User Skeleton: ON' : 'User Skeleton: OFF'}
               </button>
             </div>
+          </div>
 
-            {/* Live Real-time Voice Coach Banner Overlay (Compact bottom card) */}
-            <div className="absolute bottom-4 left-4 max-w-md z-20 pointer-events-none">
-              <div className="p-3 rounded-2xl bg-[#FFFFFF]/90 backdrop-blur-md border border-[#E2D9F3] shadow-md flex items-center gap-2.5">
-                <div className="w-7 h-7 rounded-full bg-[#EDE9FE] text-[#7F00FF] flex items-center justify-center shrink-0">
-                  <Sparkles className="w-3.5 h-3.5 text-[#7F00FF]" />
-                </div>
-                <p className="text-xs font-semibold text-[#2F3159] leading-snug">
+          {/* Live Real-time AI Coach Cue (Positioned Outside Camera Screen) */}
+          {coachMessage && (
+            <div className="calm-card p-3 sm:p-3.5 flex items-center gap-3 border border-[#E2D9F3] shadow-sm animate-fade-in">
+              <div className="w-8 h-8 rounded-full bg-[#EDE9FE] text-[#7F00FF] flex items-center justify-center shrink-0 shadow-sm">
+                <Sparkles className="w-4 h-4 text-[#7F00FF]" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] font-bold text-[#7F00FF] uppercase tracking-wider block">
+                  AI Real-Time Coach Cue
+                </span>
+                <p className="text-xs sm:text-sm font-semibold text-[#2F3159] leading-snug">
                   {coachMessage}
                 </p>
               </div>
             </div>
-          </div>
+          )}
 
           {/* Camera Switcher & Status Bar */}
           <div className="calm-surface p-3.5 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs text-[#696C92]">
