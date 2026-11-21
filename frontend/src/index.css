@@ -1,0 +1,92 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    background-color: #F3F0FF;
+    color: #2F3159;
+    font-family: 'Plus Jakarta Sans', 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    color: #2F3159;
+    letter-spacing: -0.02em;
+  }
+}
+
+/* Calm & Peaceful Design Utilities - Lavender & Deep Slate Navy */
+.calm-surface {
+  background: #FFFFFF;
+  border: 1px solid #E2D9F3;
+  box-shadow: 0 4px 20px -2px rgba(47, 49, 89, 0.04), 0 2px 6px -1px rgba(47, 49, 89, 0.02);
+}
+
+.calm-card {
+  background: #FFFFFF;
+  border: 1px solid #E2D9F3;
+  border-radius: 1.25rem;
+  box-shadow: 0 4px 16px -2px rgba(47, 49, 89, 0.05);
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.calm-card:hover {
+  transform: translateY(-3px);
+  border-color: #7F00FF;
+  box-shadow: 0 12px 28px -4px rgba(127, 0, 255, 0.12), 0 4px 10px -2px rgba(47, 49, 89, 0.04);
+}
+
+.calm-glass {
+  background: rgba(255, 255, 255, 0.90);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(226, 217, 243, 0.8);
+}
+
+/* Natural Subtle Waves & Organic Gradients */
+.bg-calm-gradient {
+  background: radial-gradient(circle at 15% 10%, rgba(237, 233, 254, 0.65) 0%, transparent 50%),
+              radial-gradient(circle at 85% 20%, rgba(224, 231, 255, 0.55) 0%, transparent 45%),
+              radial-gradient(circle at 50% 90%, rgba(243, 240, 255, 0.45) 0%, transparent 60%),
+              #F3F0FF;
+}
+
+.bg-organic-waves {
+  background-image: 
+    radial-gradient(circle at 8% 25%, rgba(127, 0, 255, 0.06) 0, transparent 35%),
+    radial-gradient(circle at 92% 70%, rgba(237, 233, 254, 0.25) 0, transparent 40%);
+}
+
+/* Custom Soft Scrollbar */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+::-webkit-scrollbar-track {
+  background: #F3F0FF;
+}
+::-webkit-scrollbar-thumb {
+  background: #C8C4E8;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #7F00FF;
+}
+
+/* Accessible focus ring */
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible {
+  outline: 2px solid #7F00FF;
+  outline-offset: 2px;
+}
+
+/* Respect Reduced Motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

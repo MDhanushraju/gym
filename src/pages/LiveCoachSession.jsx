@@ -5,7 +5,7 @@ import {
   Sparkles, Compass, Eye, ShieldCheck, Play, Pause, ChevronRight, 
   PlayCircle, ToggleLeft, ToggleRight, Layers, HelpCircle, SwitchCamera,
   Flame, Gauge, Award, CheckSquare, TrendingUp, Check, XCircle, Info,
-  Maximize2, Minimize2, Download 
+  Maximize2, Minimize2, Download, Smartphone, QrCode, Wifi, WifiOff
 } from 'lucide-react';
 import { drawSkeletonOnCanvas } from '../utils/skeletonRenderer';
 import { detectPoseForVideoFrame, initPoseLandmarker, generateKinematicLandmarks, isLandmarkerReady, getInitError, resetPoseLandmarker } from '../utils/poseDetection';
@@ -17,6 +17,9 @@ import { evaluateCameraCalibration } from '../utils/poseCalibration';
 import { voiceCoach } from '../utils/voiceCoach';
 import { requestAiCoachFeedback } from '../utils/aiCoachService';
 import { playGentleRepChime, playReadyChime } from '../utils/repCounter';
+import { dualCameraClient } from '../utils/dualCameraClient';
+import { poseSynchronizer } from '../utils/poseSynchronizer';
+import DualCameraPairModal from '../components/DualCameraPairModal';
 
 export default function LiveCoachSession({
   exercise,
@@ -29,6 +32,8 @@ export default function LiveCoachSession({
   const [isLoadingCamera, setIsLoadingCamera] = useState(false);
   const [availableDevices, setAvailableDevices] = useState([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
+  const [facingMode, setFacingMode] = useState('user'); // 'user' (front/selfie) or 'environment' (rear)
+  const facingModeRef = useRef('user');
   const [permissionError, setPermissionError] = useState('');
   const [visionInitError, setVisionInitError] = useState(null);
   const [videoDimensions, setVideoDimensions] = useState({ w: 0, h: 0 });
@@ -37,6 +42,15 @@ export default function LiveCoachSession({
 
   // Dual Perspective State: Front View is primary, Back View is optional
   const [includeBackCheck, setIncludeBackCheck] = useState(false);
+
+  // Dual-Camera Two-Device Synchronization States
+  const [isDualCameraModalOpen, setIsDualCameraModalOpen] = useState(false);
+  const [dualCameraSessionId, setDualCameraSessionId] = useState('');
+  const [isSecondaryConnected, setIsSecondaryConnected] = useState(false);
+  const isSecondaryConnectedRef = useRef(false);
+  const [secondaryMetadata, setSecondaryMetadata] = useState(null);
+  const [syncDeltaMs, setSyncDeltaMs] = useState(0);
+  const [dualCameraCountdown, setDualCameraCountdown] = useState(null);
 
   // Formanti State Machine & Repetition Telemetry
   const [engineState, setEngineState] = useState(ExerciseStates.WAITING_FOR_START);
@@ -164,6 +178,71 @@ export default function LiveCoachSession({
   useEffect(() => { showUserSkeletonRef.current = showUserSkeleton; }, [showUserSkeleton]);
   useEffect(() => { showAdvancedOverlayRef.current = showAdvancedOverlay; }, [showAdvancedOverlay]);
   useEffect(() => { includeBackCheckRef.current = includeBackCheck; }, [includeBackCheck]);
+  useEffect(() => { isSecondaryConnectedRef.current = isSecondaryConnected; }, [isSecondaryConnected]);
+
+  // Dual-Camera WebSocket Event Subscriptions
+  useEffect(() => {
+    const unsubSessionCreated = dualCameraClient.on('session_created', (msg) => {
+      setDualCameraSessionId(msg.sessionId);
+    });
+
+    const unsubPeerConnected = dualCameraClient.on('peer_connected', (msg) => {
+      if (msg.peerRole === 'secondary') {
+        setIsSecondaryConnected(true);
+        isSecondaryConnectedRef.current = true;
+        setSecondaryMetadata(msg.metadata);
+        setIncludeBackCheck(true);
+        includeBackCheckRef.current = true;
+        voiceCoach.speak('Back camera connected. Dual tracking enabled.');
+      }
+    });
+
+    const unsubPeerDisconnected = dualCameraClient.on('peer_disconnected', (msg) => {
+      if (msg.peerRole === 'secondary') {
+        setIsSecondaryConnected(false);
+        isSecondaryConnectedRef.current = false;
+        setSecondaryMetadata(null);
+        poseSynchronizer.reset();
+        voiceCoach.speak('Back camera disconnected. Continuing in front camera mode.');
+      }
+    });
+
+    const unsubCountdown = dualCameraClient.on('countdown_started', (msg) => {
+      let count = msg.durationSeconds || 3;
+      setDualCameraCountdown(count);
+      setIsDualCameraModalOpen(false);
+
+      const timer = setInterval(() => {
+        count--;
+        if (count < 0) {
+          clearInterval(timer);
+          setDualCameraCountdown(null);
+          setIsCalibrated(true);
+          if (engineRef.current) {
+            engineRef.current.isCalibrated = true;
+            engineRef.current.transitionTo(ExerciseStates.READY, 'Synchronized start confirmed! Begin practice.');
+          }
+          playReadyChime();
+        } else {
+          setDualCameraCountdown(count);
+        }
+      }, 1000);
+    });
+
+    const unsubSecondaryTelemetry = dualCameraClient.on('secondary_pose_telemetry', (msg) => {
+      poseSynchronizer.pushSecondaryFrame(msg);
+    });
+
+    return () => {
+      unsubSessionCreated();
+      unsubPeerConnected();
+      unsubPeerDisconnected();
+      unsubCountdown();
+      unsubSecondaryTelemetry();
+      dualCameraClient.disconnect();
+      poseSynchronizer.reset();
+    };
+  }, []);
 
   // =========================================================================
   // 1. Initialize Formanti Exercise State Machine Engine
@@ -252,10 +331,17 @@ export default function LiveCoachSession({
 
   useEffect(() => {
     refreshDevices();
+    if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+      const handleDeviceChange = () => refreshDevices();
+      navigator.mediaDevices.addEventListener('devicechange', handleDeviceChange);
+      return () => {
+        navigator.mediaDevices.removeEventListener('devicechange', handleDeviceChange);
+      };
+    }
   }, [refreshDevices]);
 
-  // 3. Start Physical Webcam with multi-tiered fallback
-  const startCamera = useCallback(async (deviceId = selectedDeviceId) => {
+  // 3. Start Physical Webcam with multi-tiered fallback & facingMode support
+  const startCamera = useCallback(async (deviceId = selectedDeviceId, targetFacing = facingModeRef.current) => {
     const reqId = ++cameraRequestIdRef.current;
     setIsLoadingCamera(true);
     setPermissionError('');
@@ -263,29 +349,68 @@ export default function LiveCoachSession({
     setIsDemoStream(false);
     setHasReceivedFrames(false);
 
+    // Stop active tracks immediately to release camera sensor before opening new one
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop());
       streamRef.current = null;
     }
+    if (videoRef.current && videoRef.current.srcObject) {
+      const currentStream = videoRef.current.srcObject;
+      if (currentStream.getTracks) {
+        currentStream.getTracks().forEach(t => t.stop());
+      }
+      videoRef.current.srcObject = null;
+    }
 
     try {
       let stream = null;
+      const requestedFacing = targetFacing || 'user';
+
       try {
-        const constraints = {
-          video: (deviceId && deviceId.length > 0)
-            ? { deviceId: { ideal: deviceId }, width: { ideal: 1280 }, height: { ideal: 720 } }
-            : { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
-          audio: false
+        const videoConstraints = {
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
         };
-        stream = await navigator.mediaDevices.getUserMedia(constraints);
-      } catch (firstErr) {
+
+        if (deviceId && deviceId.length > 0) {
+          videoConstraints.deviceId = { ideal: deviceId };
+          if (requestedFacing) {
+            videoConstraints.facingMode = { ideal: requestedFacing };
+          }
+        } else if (requestedFacing) {
+          videoConstraints.facingMode = { ideal: requestedFacing };
+        }
+
         stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
+          video: videoConstraints,
           audio: false
         });
+      } catch (firstErr) {
+        console.warn('Primary camera constraints failed, attempting fallback:', firstErr);
+        // Fallback 1: Direct facingMode constraint
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: { facingMode: requestedFacing },
+            audio: false
+          });
+        } catch (facingErr) {
+          // Fallback 2: Exact facingMode
+          try {
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: { facingMode: { exact: requestedFacing } },
+              audio: false
+            });
+          } catch (exactErr) {
+            // Fallback 3: General video fallback
+            stream = await navigator.mediaDevices.getUserMedia({
+              video: true,
+              audio: false
+            });
+          }
+        }
       }
 
-      // Guard against StrictMode unmount race:
+      // Guard against StrictMode unmount race or superseded camera requests:
       if (reqId !== cameraRequestIdRef.current) {
         if (stream) {
           stream.getTracks().forEach(t => t.stop());
@@ -294,6 +419,28 @@ export default function LiveCoachSession({
       }
 
       if (stream && videoRef.current) {
+        // Inspect active video track settings to identify actual deviceId and facingMode
+        const activeTrack = stream.getVideoTracks()[0];
+        let actualDeviceId = deviceId;
+        let actualFacingMode = requestedFacing;
+
+        if (activeTrack) {
+          const settings = activeTrack.getSettings ? activeTrack.getSettings() : {};
+          if (settings.deviceId) {
+            actualDeviceId = settings.deviceId;
+            setSelectedDeviceId(settings.deviceId);
+          }
+          if (settings.facingMode) {
+            actualFacingMode = settings.facingMode;
+          }
+        }
+
+        setFacingMode(actualFacingMode);
+        facingModeRef.current = actualFacingMode;
+
+        // Refresh enumerated devices so permissions populate complete labels/deviceIds
+        refreshDevices();
+
         videoRef.current.srcObject = stream;
         streamRef.current = stream;
 
@@ -326,16 +473,62 @@ export default function LiveCoachSession({
 
         setIsCameraActive(true);
         setIsLoadingCamera(false);
-        voiceCoach.speak('Camera connected. Position your camera approximately 2 metres away.', { priority: true });
+        voiceCoach.speak(
+          actualFacingMode === 'environment'
+            ? 'Rear camera active.'
+            : 'Camera connected. Position your camera approximately 2 metres away.',
+          { priority: true }
+        );
         return;
       }
     } catch (err) {
       if (reqId !== cameraRequestIdRef.current) return;
       console.warn('Physical camera unavailable:', err.name, err.message);
       setIsLoadingCamera(false);
-      setPermissionError(`Webcam permission notice: ${err.message || 'Device in use or blocked'}.`);
+      const friendlyMsg = err.name === 'NotAllowedError'
+        ? 'Camera permission denied. Please allow camera access in browser settings.'
+        : err.name === 'NotFoundError' || err.name === 'OverconstrainedError'
+          ? `Could not switch to ${targetFacing === 'environment' ? 'rear' : 'front'} camera on this device.`
+          : `Camera error: ${err.message || 'Device in use or unavailable'}.`;
+      setPermissionError(friendlyMsg);
+      // NOTE: Do not start demo simulation automatically on error.
     }
-  }, [selectedDeviceId]);
+  }, [selectedDeviceId, refreshDevices]);
+
+  // Touch-friendly camera switcher for mobile (front <-> rear) and desktop
+  const handleSwitchCamera = useCallback(async () => {
+    if (isLoadingCamera) return;
+
+    if (isDemoStream) {
+      startCamera();
+      return;
+    }
+
+    const currentFacing = facingModeRef.current;
+    const nextFacing = (currentFacing === 'environment') ? 'user' : 'environment';
+
+    let nextDeviceId = '';
+    if (availableDevices.length > 1) {
+      const lowerKeywords = nextFacing === 'environment'
+        ? ['back', 'rear', 'environment', 'outer', 'facing back']
+        : ['front', 'user', 'selfie', 'facing front', 'facetime'];
+
+      const matchingDevice = availableDevices.find(dev => {
+        const lbl = (dev.label || '').toLowerCase();
+        return lowerKeywords.some(kw => lbl.includes(kw));
+      });
+
+      if (matchingDevice && matchingDevice.deviceId !== selectedDeviceId) {
+        nextDeviceId = matchingDevice.deviceId;
+      } else {
+        const currentIdx = availableDevices.findIndex(dev => dev.deviceId === selectedDeviceId);
+        const nextIdx = (currentIdx + 1) % availableDevices.length;
+        nextDeviceId = availableDevices[nextIdx]?.deviceId || '';
+      }
+    }
+
+    await startCamera(nextDeviceId, nextFacing);
+  }, [isLoadingCamera, isDemoStream, availableDevices, selectedDeviceId, startCamera]);
 
   // 4. Practice Simulation Mode Fallback (ONLY when user explicitly activates it)
   const startDemoSimulation = useCallback(() => {
@@ -523,9 +716,19 @@ export default function LiveCoachSession({
                 if (!frontResult.shoulderLevel.isGood) highlightedJoints.push(11, 12);
               }
 
-              // Optional Back View checks
+              // Optional Back View checks (Single camera fallback OR synchronized dual-camera telemetry)
               if (includeBackCheckRef.current) {
-                const backResult = analyzeBackView(landmarksToDraw);
+                let backResult = null;
+                if (isSecondaryConnectedRef.current) {
+                  const syncResult = poseSynchronizer.matchAndAnalyze(timestamp);
+                  if (syncResult && syncResult.posteriorAnalysis) {
+                    backResult = syncResult.posteriorAnalysis;
+                    setSyncDeltaMs(Math.round(syncResult.deltaMs));
+                  }
+                } else {
+                  backResult = analyzeBackView(landmarksToDraw);
+                }
+
                 if (backResult) {
                   setBackChecklist({
                     spineNeutrality: { 
@@ -540,8 +743,8 @@ export default function LiveCoachSession({
                     },
                     lumbarPosture: { 
                       label: 'Lumbar Alignment', 
-                      status: 'Correct', 
-                      type: 'good' 
+                      status: backResult.lumbarAlignment?.status || 'Correct', 
+                      type: backResult.lumbarAlignment?.isGood ? 'good' : 'warn' 
                     }
                   });
                 }
@@ -656,7 +859,7 @@ export default function LiveCoachSession({
             showAngles: showAdvancedOverlayRef.current,
             showDepthHUD: showAdvancedOverlayRef.current,
             isCalibrated: isCalibrated,
-            isMirrored: !isDemoStream,
+            isMirrored: !isDemoStream && (facingModeRef.current === 'user'),
             videoWidth: video?.videoWidth || 640,
             videoHeight: video?.videoHeight || 480,
             highlightedJoints,
@@ -1018,7 +1221,7 @@ export default function LiveCoachSession({
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
-              onClick={() => startCamera(selectedDeviceId)}
+              onClick={() => startCamera(selectedDeviceId, facingMode)}
               className="px-3.5 py-1.5 rounded-full font-semibold text-xs bg-[#FFFFFF] border border-[#FFE082] text-[#2F3159] hover:bg-[#F3F0FF]"
             >
               Retry Camera
@@ -1075,7 +1278,7 @@ export default function LiveCoachSession({
                 e.target.muted = true;
                 e.target.play().catch(() => {});
               }}
-              className={`w-full h-full object-cover -scale-x-100 ${isDemoStream ? 'hidden' : 'block'}`}
+              className={`w-full h-full object-cover ${(!isDemoStream && facingMode === 'user') ? '-scale-x-100' : ''} ${isDemoStream ? 'hidden' : 'block'}`}
             />
 
             {/* Dynamic Skeleton Canvas Overlay (Direct forward renderer) */}
@@ -1083,6 +1286,22 @@ export default function LiveCoachSession({
               ref={canvasRef}
               className="absolute inset-0 w-full h-full z-10 pointer-events-none"
             />
+
+            {/* Synchronized Dual-Camera Shared Countdown Overlay */}
+            {dualCameraCountdown !== null && (
+              <div className="absolute inset-0 bg-black/80 backdrop-blur-md z-30 flex flex-col items-center justify-center animate-fade-in text-white p-6 text-center">
+                <span className="text-xs font-bold uppercase tracking-widest text-[#BBF7D0] mb-2 flex items-center gap-1.5">
+                  <Wifi className="w-4 h-4 text-[#16A34A] animate-pulse" />
+                  Synchronized Dual-Camera Start
+                </span>
+                <div className="text-8xl sm:text-9xl font-black text-white animate-bounce">
+                  {dualCameraCountdown === 0 ? 'GO!' : dualCameraCountdown}
+                </div>
+                <span className="text-xs text-white/70 mt-3 font-mono">
+                  Both devices locking calibration together...
+                </span>
+              </div>
+            )}
 
             {/* Camera Loading Spinner if initializing */}
             {isLoadingCamera && (
@@ -1096,14 +1315,37 @@ export default function LiveCoachSession({
             <div className="absolute top-4 left-4 z-20 flex flex-wrap items-center gap-2">
               <div className="px-3 py-1 rounded-full bg-[#FFFFFF]/95 backdrop-blur-sm border border-[#E2D9F3] text-xs font-semibold text-[#2F3159] shadow-sm flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-[#16A34A] animate-pulse" />
-                <span>{isDemoStream ? 'Simulation Active' : 'Front Vision Active'}</span>
+                <span>{isDemoStream ? 'Simulation Active' : (facingMode === 'environment' ? 'Rear Camera Active' : 'Front Camera Active')}</span>
               </div>
+
+              {/* Dual-Camera Active Badge */}
+              {isSecondaryConnected && (
+                <div className="px-3 py-1 rounded-full bg-[#16A34A] text-white text-xs font-bold shadow-sm flex items-center gap-1.5">
+                  <Wifi className="w-3.5 h-3.5" />
+                  <span>Dual-Cam Synced ({dualCameraSessionId})</span>
+                </div>
+              )}
+
+              {/* Touch-Friendly Switch Camera Button directly on live camera view */}
+              {!isDemoStream && (
+                <button
+                  type="button"
+                  onClick={handleSwitchCamera}
+                  disabled={isLoadingCamera}
+                  className="px-3 py-1 rounded-full text-xs font-bold bg-[#FFFFFF]/95 hover:bg-[#F3F0FF] active:scale-95 border border-[#E2D9F3] text-[#2F3159] shadow-sm transition-all flex items-center gap-1.5 touch-manipulation min-h-[32px] cursor-pointer"
+                  title={`Switch to ${facingMode === 'user' ? 'rear' : 'front'} camera`}
+                  aria-label="Switch camera"
+                >
+                  <SwitchCamera className={`w-3.5 h-3.5 text-[#7F00FF] ${isLoadingCamera ? 'animate-spin' : ''}`} />
+                  <span>{facingMode === 'user' ? 'Switch to Rear' : 'Switch to Front'}</span>
+                </button>
+              )}
 
               {/* Mode Toggle Pill */}
               <button
                 onClick={() => {
                   if (isDemoStream) {
-                    startCamera(selectedDeviceId);
+                    startCamera(selectedDeviceId, facingMode);
                   } else {
                     startDemoSimulation();
                   }
@@ -1166,6 +1408,18 @@ export default function LiveCoachSession({
                       <strong className={isCameraActive ? "text-[#16A34A]" : "text-[#DC2626]"}>
                         {isCameraActive ? (isDemoStream ? 'YES (SIMULATION)' : 'YES (LIVE WEBCAM)') : 'NO'}
                       </strong>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-white/60">Facing Mode:</span>
+                      <span className="text-[#BBF7D0] font-bold">
+                        {facingMode === 'environment' ? 'Rear (Environment)' : 'Front (User)'}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[11px]">
+                      <span className="text-white/60">Dual-Camera Sync:</span>
+                      <span className={isSecondaryConnected ? "text-[#16A34A] font-bold" : "text-white/40"}>
+                        {isSecondaryConnected ? `CONNECTED (Δ ${syncDeltaMs}ms)` : 'OFF (Single Camera)'}
+                      </span>
                     </div>
                     <div className="flex justify-between text-[11px]">
                       <span className="text-white/60">Camera FPS:</span>
@@ -1424,26 +1678,69 @@ export default function LiveCoachSession({
             <div className="flex items-center gap-2">
               <ShieldCheck className="w-4 h-4 text-[#7F00FF]" />
               <span>
-                {includeBackCheck 
-                  ? 'Dual Tracking Active: Front View + Optional Back View' 
-                  : isSquatExercise
-                    ? 'Front View Active (Hip Descent Tracking)'
-                    : 'Side Profile Active (Elbow Angle Tracking)'}
+                {isSecondaryConnected
+                  ? `Dual Tracking Active: Front View + Synchronized Back View (${dualCameraSessionId})`
+                  : includeBackCheck 
+                    ? 'Dual Tracking Active: Front View + Optional Back View' 
+                    : isSquatExercise
+                      ? 'Front View Active (Hip Descent Tracking)'
+                      : 'Side Profile Active (Elbow Angle Tracking)'}
               </span>
             </div>
 
             {/* Device Switcher / Reconnect Actions */}
             <div className="flex items-center gap-2 flex-wrap">
+              {/* Dual-Camera Pairing Action Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  setIsDualCameraModalOpen(true);
+                  if (!dualCameraSessionId) {
+                    dualCameraClient.createSession(exercise.id);
+                  }
+                }}
+                className={`px-3.5 py-1.5 rounded-full font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 touch-manipulation min-h-[34px] cursor-pointer ${
+                  isSecondaryConnected
+                    ? 'bg-[#16A34A] hover:bg-[#15803D] text-white'
+                    : 'bg-[#EDE9FE] hover:bg-[#DDD6FE] text-[#7F00FF]'
+                }`}
+                title="Pair phone #2 as synchronized back-view camera"
+              >
+                <Smartphone className="w-3.5 h-3.5" />
+                <span>{isSecondaryConnected ? `Phone #2 Synced (${dualCameraSessionId})` : 'Pair 2nd Phone (Back View)'}</span>
+              </button>
+
+              {/* Touch-Friendly Mobile & Desktop Switch Camera Button */}
+              {!isDemoStream && (
+                <button
+                  type="button"
+                  onClick={handleSwitchCamera}
+                  disabled={isLoadingCamera}
+                  className="px-3.5 py-1.5 rounded-full bg-[#7F00FF] hover:bg-[#6E00DE] active:scale-95 text-white font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 touch-manipulation min-h-[34px] cursor-pointer"
+                  title={`Switch to ${facingMode === 'user' ? 'rear' : 'front'} camera`}
+                  aria-label="Switch camera"
+                >
+                  <SwitchCamera className={`w-3.5 h-3.5 ${isLoadingCamera ? 'animate-spin' : ''}`} />
+                  <span>Switch Camera ({facingMode === 'user' ? 'Rear' : 'Front'})</span>
+                </button>
+              )}
+
               {availableDevices.length > 1 && (
                 <div className="flex items-center gap-1.5 bg-[#FFFFFF] px-2.5 py-1 rounded-full border border-[#E2D9F3]">
                   <SwitchCamera className="w-3.5 h-3.5 text-[#7F00FF]" />
                   <select
                     value={selectedDeviceId}
                     onChange={(e) => {
-                      setSelectedDeviceId(e.target.value);
-                      startCamera(e.target.value);
+                      const newDevId = e.target.value;
+                      setSelectedDeviceId(newDevId);
+                      const chosen = availableDevices.find(d => d.deviceId === newDevId);
+                      const lbl = (chosen?.label || '').toLowerCase();
+                      const isBack = ['back', 'rear', 'environment', 'outer'].some(k => lbl.includes(k));
+                      const isFront = ['front', 'user', 'selfie', 'facetime'].some(k => lbl.includes(k));
+                      const newFacing = isBack ? 'environment' : (isFront ? 'user' : facingMode);
+                      startCamera(newDevId, newFacing);
                     }}
-                    className="bg-transparent text-[11px] font-semibold text-[#2F3159] focus:outline-none"
+                    className="bg-transparent text-[11px] font-semibold text-[#2F3159] focus:outline-none cursor-pointer"
                   >
                     {availableDevices.map(dev => (
                       <option key={dev.deviceId} value={dev.deviceId}>
@@ -1455,15 +1752,15 @@ export default function LiveCoachSession({
               )}
 
               <button
-                onClick={() => startCamera(selectedDeviceId)}
-                className="px-3 py-1 rounded-full bg-[#F3F0FF] hover:bg-[#EDE9FE] text-[#2F3159] font-semibold text-[11px] transition-colors"
+                onClick={() => startCamera(selectedDeviceId, facingMode)}
+                className="px-3 py-1 rounded-full bg-[#F3F0FF] hover:bg-[#EDE9FE] text-[#2F3159] font-semibold text-[11px] transition-colors cursor-pointer"
               >
                 Reconnect Camera
               </button>
 
               <button
                 onClick={startDemoSimulation}
-                className="px-3 py-1 rounded-full bg-[#F3F0FF] hover:bg-[#EDE9FE] text-[#2F3159] font-semibold text-[11px] transition-colors"
+                className="px-3 py-1 rounded-full bg-[#F3F0FF] hover:bg-[#EDE9FE] text-[#2F3159] font-semibold text-[11px] transition-colors cursor-pointer"
               >
                 Use Practice Demo Clip
               </button>
@@ -1739,7 +2036,7 @@ export default function LiveCoachSession({
               ))}
             </div>
 
-            {/* Back View Checks (Optional Toggle) */}
+            {/* Back View Checks (Optional Toggle & Dual Phone Pairing) */}
             <div className="space-y-2 pt-2 border-t border-[#E2D9F3]">
               <div className="flex items-center justify-between">
                 <div>
@@ -1747,21 +2044,44 @@ export default function LiveCoachSession({
                     Back View Checks (Optional)
                   </span>
                   <span className="text-[10px] text-[#696C92]">
-                    {includeBackCheck ? 'Posterior alignment enabled' : 'Optional posterior check is OFF'}
+                    {isSecondaryConnected
+                      ? `Phone #2 Connected (${dualCameraSessionId})`
+                      : includeBackCheck ? 'Posterior alignment enabled' : 'Optional posterior check is OFF'}
                   </span>
                 </div>
 
-                <button
-                  onClick={() => setIncludeBackCheck(!includeBackCheck)}
-                  className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border flex items-center gap-1 transition-all ${
-                    includeBackCheck
-                      ? 'bg-[#EDE9FE] border-[#7F00FF] text-[#2F3159]'
-                      : 'bg-[#FFFFFF] border-[#E2D9F3] text-[#696C92]'
-                  }`}
-                >
-                  {includeBackCheck ? <ToggleRight className="w-3.5 h-3.5 text-[#16A34A]" /> : <ToggleLeft className="w-3.5 h-3.5" />}
-                  <span>{includeBackCheck ? 'Enabled' : 'Optional (Off)'}</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDualCameraModalOpen(true);
+                      if (!dualCameraSessionId) {
+                        dualCameraClient.createSession(exercise.id);
+                      }
+                    }}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border flex items-center gap-1 transition-all ${
+                      isSecondaryConnected
+                        ? 'bg-[#F0FDF4] border-[#BBF7D0] text-[#16A34A]'
+                        : 'bg-[#EDE9FE] border-[#7F00FF] text-[#7F00FF] hover:bg-[#DDD6FE]'
+                    }`}
+                    title="Pair second phone for back camera view"
+                  >
+                    <Smartphone className="w-3 h-3" />
+                    <span>{isSecondaryConnected ? 'Phone #2 Synced' : 'Pair Phone #2'}</span>
+                  </button>
+
+                  <button
+                    onClick={() => setIncludeBackCheck(!includeBackCheck)}
+                    className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border flex items-center gap-1 transition-all ${
+                      includeBackCheck
+                        ? 'bg-[#EDE9FE] border-[#7F00FF] text-[#2F3159]'
+                        : 'bg-[#FFFFFF] border-[#E2D9F3] text-[#696C92]'
+                    }`}
+                  >
+                    {includeBackCheck ? <ToggleRight className="w-3.5 h-3.5 text-[#16A34A]" /> : <ToggleLeft className="w-3.5 h-3.5" />}
+                    <span>{includeBackCheck ? 'Enabled' : 'Optional (Off)'}</span>
+                  </button>
+                </div>
               </div>
             </div>
           </div>
@@ -1808,6 +2128,22 @@ export default function LiveCoachSession({
         </div>
 
       </div>
+
+      {/* Dual Camera Pairing Dialog Modal */}
+      <DualCameraPairModal
+        isOpen={isDualCameraModalOpen}
+        onClose={() => setIsDualCameraModalOpen(false)}
+        sessionId={dualCameraSessionId}
+        isSecondaryConnected={isSecondaryConnected}
+        secondaryMetadata={secondaryMetadata}
+        onStartCountdown={() => {
+          dualCameraClient.startCountdown(3);
+        }}
+        onSingleCameraMode={() => {
+          setIsDualCameraModalOpen(false);
+          setIncludeBackCheck(false);
+        }}
+      />
 
     </div>
   );

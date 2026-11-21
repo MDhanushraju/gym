@@ -129,7 +129,8 @@ node test/videoAnalysisSuite.test.js
 
 ## 🏃 Getting Started
 
-Start the development server:
+### 1. Single-Device Mode (Standard)
+Start the frontend development server:
 
 ```bash
 npm run dev
@@ -137,8 +138,55 @@ npm run dev
 
 Visit `http://localhost:5173` in your browser.
 
-Build for production:
+---
+
+### 2. Synchronized Two-Device Camera Mode (Front + Back View)
+FormFit supports using two mobile phones or devices simultaneously:
+- **Device 1 (Primary / Front View):** Sits in front of you running the exercise engine and authoritative rep counter.
+- **Device 2 (Secondary / Back View):** Sits behind you using its rear camera to monitor spine lateral neutrality, scapular retraction, and lumbar posture.
+
+#### Running the Backend & Frontend:
+
+1. **Start the WebSocket Relay Server:**
+   ```bash
+   npm run server
+   ```
+   *Runs on port 3001 (`ws://0.0.0.0:3001` and `http://0.0.0.0:3001/health`).*
+
+2. **Start the Vite Frontend (with Network host access):**
+   ```bash
+   npm run dev -- --host
+   ```
+
+3. **Configure WebSocket URL (Optional):**
+   Set `VITE_DUAL_CAMERA_WS_URL=ws://<YOUR_LAN_IP>:3001` in your `.env` if testing across different devices on your local Wi-Fi. By default, it derives the host automatically from `window.location.hostname`.
+
+4. **Pairing the Two Devices:**
+   - On **Device 1**, start a workout and tap **"Pair 2nd Phone (Back View)"**.
+   - A modal displays a short join code (e.g. `FF-8924`) and a QR code.
+   - On **Device 2**, scan the QR code (or open the app and tap **"📷 Join 2nd Cam"** from the navigation bar).
+   - Once paired, Device 1 shows **"Back Camera Connected & Ready!"**.
+   - Tap **"Start Dual-Camera Session"** on Device 1: both devices countdown simultaneously (**3... 2... 1... GO!**) and begin synchronized tracking.
+
+#### 🔒 Privacy & HTTPS Security Notice for Mobile:
+- **Zero Video Transmission:** MediaPipe processes video locally on each phone. **No camera images or video frames are ever transmitted over the network or saved.** Only lightweight numerical joint coordinates (JSON) are relayed.
+- **Mobile HTTPS Requirement:** Modern mobile browsers (iOS Safari, Android Chrome) require a secure context (`https://` or `localhost`) to grant camera access. When running over a local Wi-Fi network, use a tunnel like `mkcert`, Cloudflare Tunnel, or local HTTPS certificates (`vite --https`) so both devices can access their cameras.
+
+---
+
+### 3. Automated Test Suites & Production Build
 
 ```bash
+# Run camera switch unit test suite
+node test/cameraSwitch.test.js
+
+# Run dual-camera pairing, synchronizer, and security test suite
+node test/dualCameraSuite.test.js
+
+# Run squat and pushup biomechanical detection suites
+node test/squatDetectionSuite.test.js
+node test/pushupDetectionSuite.test.js
+
+# Production build
 npm run build
 ```

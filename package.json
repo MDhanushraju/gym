@@ -6,14 +6,20 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "server": "node backend/server.js",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "build:frontend": "npm run build --prefix frontend",
+    "start:backend": "npm start --prefix backend"
   },
   "dependencies": {
     "@mediapipe/tasks-vision": "^0.10.18",
     "canvas-confetti": "^1.9.3",
     "lucide-react": "^0.454.0",
+    "qrcode": "^1.5.4",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "ws": "^8.23.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.3",
@@ -23,4 +29,3 @@
     "vite": "^5.4.10"
   }
 }
-

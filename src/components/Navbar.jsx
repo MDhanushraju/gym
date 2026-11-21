@@ -18,6 +18,7 @@ export default function Navbar({
     { id: 'exercises', label: 'Exercises' },
     { id: 'live-coach', label: 'Live Coach' },
     { id: 'my-progress', label: 'My Progress' },
+    { id: 'back-camera-node', label: '📷 Join 2nd Cam' },
   ];
 
   const handleNavClick = (screenId) => {

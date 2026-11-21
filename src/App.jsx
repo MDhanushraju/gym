@@ -10,14 +10,30 @@ import VideoUpload from './pages/VideoUpload';
 import AnalysisResults from './pages/AnalysisResults';
 import WorkoutSummary from './pages/WorkoutSummary';
 import MyProgress from './pages/MyProgress';
+import BackCameraNode from './pages/BackCameraNode';
 import { EXERCISES } from './data/exercises';
 import { initPoseLandmarker } from './utils/poseDetection';
 import { getDailyGoal } from './utils/storage';
 
 export default function App() {
   // Navigation State:
-  // 'welcome' | 'exercises' | 'demo' | 'live-coach' | 'upload' | 'analysis' | 'workout-summary' | 'my-progress'
+  // 'welcome' | 'exercises' | 'demo' | 'live-coach' | 'upload' | 'analysis' | 'workout-summary' | 'my-progress' | 'back-camera-node'
   const [currentScreen, setCurrentScreen] = useState('welcome');
+  const [joinSessionCode, setJoinSessionCode] = useState('');
+  
+  // Detect ?join=CODE in URL query params on initial load
+  useEffect(() => {
+    try {
+      if (typeof window !== 'undefined' && window.location) {
+        const params = new URLSearchParams(window.location.search);
+        const code = params.get('join');
+        if (code) {
+          setJoinSessionCode(code.trim().toUpperCase());
+          setCurrentScreen('back-camera-node');
+        }
+      }
+    } catch (e) {}
+  }, []);
   
   // Active Exercise Selection
   const [selectedExercise, setSelectedExercise] = useState(EXERCISES[0]); // Default: Basic Squats
@@ -176,6 +192,13 @@ export default function App() {
           <MyProgress
             onSelectExercise={handleSelectExercise}
             onStartWorkout={handleStartMoving}
+          />
+        )}
+
+        {currentScreen === 'back-camera-node' && (
+          <BackCameraNode
+            initialSessionCode={joinSessionCode}
+            onBack={handleReturnHome}
           />
         )}
         </ErrorBoundary>
