@@ -45,7 +45,14 @@ export default function LiveCoachSession({
 
   // Dual-Camera Two-Device Synchronization States
   const [isDualCameraModalOpen, setIsDualCameraModalOpen] = useState(false);
-  const [dualCameraSessionId, setDualCameraSessionId] = useState('');
+  const [dualCameraSessionId, setDualCameraSessionId] = useState(() => {
+    const chars = '23456789ABCDEFGHJKLMNPQRSTUVWXYZ';
+    let code = 'FF-';
+    for (let i = 0; i < 4; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return code;
+  });
   const [isSecondaryConnected, setIsSecondaryConnected] = useState(false);
   const isSecondaryConnectedRef = useRef(false);
   const [secondaryMetadata, setSecondaryMetadata] = useState(null);
@@ -182,6 +189,9 @@ export default function LiveCoachSession({
 
   // Dual-Camera WebSocket Event Subscriptions
   useEffect(() => {
+    // Pre-create session in background so QR code and pairing code are instant
+    dualCameraClient.createSession(exercise.id, dualCameraSessionId);
+
     const unsubSessionCreated = dualCameraClient.on('session_created', (msg) => {
       setDualCameraSessionId(msg.sessionId);
     });

@@ -169,7 +169,9 @@ export function createDualCameraServer() {
 function handleClientMessage(ws, msg) {
   switch (msg.type) {
     case 'create_session': {
-      let code = generateSessionCode();
+      let code = (msg.sessionId && isValidSessionCode(msg.sessionId) && !sessions.has(msg.sessionId.toUpperCase()))
+        ? msg.sessionId.toUpperCase()
+        : generateSessionCode();
       while (sessions.has(code)) {
         code = generateSessionCode();
       }

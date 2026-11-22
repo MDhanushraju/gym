@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, Smartphone, QrCode, Copy, Check, ShieldCheck, 
-  RefreshCw, CheckCircle2, ArrowRight, Video, Wifi, AlertCircle 
+  RefreshCw, CheckCircle2, ArrowRight, Video, Wifi, AlertCircle, Settings2, Globe
 } from 'lucide-react';
 import QRCode from 'qrcode';
+import { dualCameraClient } from '../utils/dualCameraClient';
 
 export default function DualCameraPairModal({
   isOpen,
@@ -16,15 +17,28 @@ export default function DualCameraPairModal({
 }) {
   const [qrDataUrl, setQrDataUrl] = useState('');
   const [copied, setCopied] = useState(false);
+  const [serverUrl, setServerUrl] = useState(dualCameraClient.url || '');
+  const [isEditingServer, setIsEditingServer] = useState(false);
+  const [isWsConnected, setIsWsConnected] = useState(dualCameraClient.isConnected);
   const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
-  // Generate join URL for phone #2
+  useEffect(() => {
+    setIsWsConnected(dualCameraClient.isConnected);
+    const unsub = dualCameraClient.on('connection_changed', (msg) => {
+      setIsWsConnected(Boolean(msg.isConnected));
+    });
+    return () => unsub();
+  }, []);
+
+  // Generate join URL for phone #2 including WebSocket server parameter
+  const wsParam = encodeURIComponent(dualCameraClient.url || '');
+  const activeSession = sessionId || 'FF-SYNC';
   const joinUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}${window.location.pathname}?join=${sessionId}`
-    : `https://formfit.app/?join=${sessionId}`;
+    ? `${window.location.origin}${window.location.pathname}?join=${activeSession}&ws=${wsParam}`
+    : `https://mdhanushraju.github.io/gym/?join=${activeSession}`;
 
   useEffect(() => {
-    if (sessionId) {
+    if (activeSession) {
       QRCode.toDataURL(joinUrl, {
         width: 220,
         margin: 2,
@@ -36,9 +50,15 @@ export default function DualCameraPairModal({
         .then(url => setQrDataUrl(url))
         .catch(err => console.warn('QR code generation error:', err));
     }
-  }, [sessionId, joinUrl]);
+  }, [activeSession, joinUrl]);
 
   if (!isOpen) return null;
+
+  const handleSaveServerUrl = () => {
+    if (!serverUrl) return;
+    dualCameraClient.setWebSocketUrl(serverUrl.trim());
+    setIsEditingServer(false);
+  };
 
   const handleCopyCode = () => {
     if (!sessionId) return;
@@ -112,17 +132,66 @@ export default function DualCameraPairModal({
               Or Enter Join Code:
             </span>
             <div className="px-5 py-2.5 rounded-2xl bg-[#FFFFFF] border-2 border-[#7F00FF] font-mono text-2xl font-black text-[#7F00FF] shadow-sm tracking-widest">
-              {sessionId || 'GENERATING...'}
+              {activeSession}
             </div>
             <button
               onClick={handleCopyCode}
-              disabled={!sessionId}
-              className="px-3.5 py-1.5 rounded-full bg-[#EDE9FE] hover:bg-[#DDD6FE] text-[#7F00FF] text-xs font-semibold flex items-center gap-1.5 transition-colors"
+              className="px-3.5 py-1.5 rounded-full bg-[#EDE9FE] hover:bg-[#DDD6FE] text-[#7F00FF] text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             >
               {copied ? <Check className="w-3.5 h-3.5 text-[#16A34A]" /> : <Copy className="w-3.5 h-3.5" />}
               <span>{copied ? 'Code Copied!' : 'Copy Join Code'}</span>
             </button>
           </div>
+        </div>
+
+        {/* WebSocket Sync Server Status & Endpoint Setting */}
+        <div className="mb-4 p-3 rounded-2xl bg-[#F8FAFC] border border-[#E2E8F0] text-xs">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${isWsConnected ? 'bg-[#16A34A] shadow-[0_0_8px_#16A34A]' : 'bg-[#EF4444]'}`} />
+              <div className="truncate">
+                <span className="font-semibold text-[#2F3159]">
+                  {isWsConnected ? 'Sync Server: Connected' : 'Sync Server: Disconnected'}
+                </span>
+                <span className="text-[10px] text-[#64748B] block truncate">
+                  {dualCameraClient.url}
+                </span>
+              </div>
+            </div>
+            <button
+              onClick={() => setIsEditingServer(!isEditingServer)}
+              className="px-2.5 py-1 rounded-lg bg-white border border-slate-200 text-[#475569] text-[11px] font-medium hover:bg-slate-50 transition-colors shrink-0 flex items-center gap-1 cursor-pointer"
+            >
+              <Settings2 className="w-3 h-3" />
+              <span>{isEditingServer ? 'Close' : 'Change URL'}</span>
+            </button>
+          </div>
+
+          {isEditingServer && (
+            <div className="mt-3 pt-3 border-t border-slate-200 space-y-2">
+              <label className="text-[10px] font-bold text-[#475569] uppercase tracking-wider block">
+                WebSocket Backend URL:
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={serverUrl}
+                  onChange={(e) => setServerUrl(e.target.value)}
+                  placeholder="wss://your-backend.onrender.com or ws://192.168.0.x:3001"
+                  className="flex-1 px-3 py-1.5 rounded-xl border border-slate-300 text-xs text-[#1E293B] font-mono focus:outline-none focus:ring-2 focus:ring-[#7F00FF]/30"
+                />
+                <button
+                  onClick={handleSaveServerUrl}
+                  className="px-3.5 py-1.5 rounded-xl bg-[#7F00FF] hover:bg-[#6E00DE] text-white text-xs font-semibold shadow-sm transition-transform active:scale-95 cursor-pointer"
+                >
+                  Save & Connect
+                </button>
+              </div>
+              <p className="text-[10px] text-[#64748B]">
+                Tip: If using Render, enter your <code>wss://...onrender.com</code> URL. If testing over Wi-Fi, enter <code>ws://YOUR_COMPUTER_IP:3001</code>.
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Connection Status Box */}

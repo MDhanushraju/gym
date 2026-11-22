@@ -17,11 +17,46 @@ export class DualCameraClient {
     this.pendingTelemetryThrottle = 0;
   }
 
+  setWebSocketUrl(newUrl) {
+    if (!newUrl) return;
+    this.url = newUrl.trim();
+    if (typeof window !== 'undefined' && window.localStorage) {
+      window.localStorage.setItem('formfit_backend_ws_url', this.url);
+    }
+    if (this.ws) {
+      try { this.ws.close(); } catch (e) {}
+      this.ws = null;
+    }
+    this.isConnected = false;
+    this.emit('connection_changed', { isConnected: false });
+    this.connect().catch(() => {});
+  }
+
   /**
-   * Determine WebSocket URL from environment variable or window location
+   * Determine WebSocket URL from environment variable, query param, or window location
    */
   getWebSocketUrl() {
-    // 1. Explicit Vite env var
+    // 1. URL Query parameter (e.g. ?join=CODE&ws=wss://...)
+    if (typeof window !== 'undefined' && window.location && window.location.search) {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        const wsParam = params.get('ws');
+        if (wsParam) {
+          if (window.localStorage) {
+            window.localStorage.setItem('formfit_backend_ws_url', wsParam);
+          }
+          return wsParam;
+        }
+      } catch (e) {}
+    }
+
+    // 2. LocalStorage override
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const stored = window.localStorage.getItem('formfit_backend_ws_url');
+      if (stored && stored.trim()) return stored.trim();
+    }
+
+    // 3. Explicit Vite env var
     if (import.meta.env && import.meta.env.VITE_DUAL_CAMERA_WS_URL) {
       return import.meta.env.VITE_DUAL_CAMERA_WS_URL;
     }
@@ -29,11 +64,15 @@ export class DualCameraClient {
       return import.meta.env.VITE_WS_URL;
     }
 
-    // 2. Derive from browser location (supports mobile on local network)
+    // 4. Derive from browser location
     if (typeof window !== 'undefined' && window.location) {
+      const hostname = window.location.hostname || 'localhost';
+      // GitHub Pages does not run WebSockets on port 3001
+      if (hostname.endsWith('github.io')) {
+        return 'wss://gym-backend-5oxw.onrender.com';
+      }
       const isHttps = window.location.protocol === 'https:';
       const wsProtocol = isHttps ? 'wss:' : 'ws:';
-      const hostname = window.location.hostname || 'localhost';
       return `${wsProtocol}//${hostname}:3001`;
     }
 
@@ -207,11 +246,15 @@ export class DualCameraClient {
   /**
    * Primary action: Create new session
    */
-  async createSession(exerciseId = 'basic-squats') {
-    await this.connect();
+  async createSession(exerciseId = 'basic-squats', preferredSessionId = null) {
+    if (preferredSessionId) {
+      this.sessionId = preferredSessionId;
+    }
+    await this.connect().catch(() => {});
     this.send({
       type: 'create_session',
-      exerciseId
+      exerciseId,
+      sessionId: preferredSessionId
     });
   }
 
