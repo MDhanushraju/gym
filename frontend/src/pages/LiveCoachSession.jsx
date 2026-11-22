@@ -1710,9 +1710,7 @@ export default function LiveCoachSession({
                 type="button"
                 onClick={() => {
                   setIsDualCameraModalOpen(true);
-                  if (!dualCameraSessionId) {
-                    dualCameraClient.createSession(exercise.id);
-                  }
+                  dualCameraClient.createSession(exercise.id, dualCameraSessionId);
                 }}
                 className={`px-3.5 py-1.5 rounded-full font-bold text-xs shadow-sm transition-all flex items-center gap-1.5 touch-manipulation min-h-[34px] cursor-pointer ${
                   isSecondaryConnected
@@ -2070,9 +2068,7 @@ export default function LiveCoachSession({
                     type="button"
                     onClick={() => {
                       setIsDualCameraModalOpen(true);
-                      if (!dualCameraSessionId) {
-                        dualCameraClient.createSession(exercise.id);
-                      }
+                      dualCameraClient.createSession(exercise.id, dualCameraSessionId);
                     }}
                     className={`px-2.5 py-1 rounded-full text-[11px] font-semibold border flex items-center gap-1 transition-all ${
                       isSecondaryConnected

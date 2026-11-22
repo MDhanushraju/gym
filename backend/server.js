@@ -166,7 +166,7 @@ export function createDualCameraServer() {
 /**
  * Handle message dispatch
  */
-function handleClientMessage(ws, msg) {
+async function handleClientMessage(ws, msg) {
   switch (msg.type) {
     case 'create_session': {
       let code = (msg.sessionId && isValidSessionCode(msg.sessionId) && !sessions.has(msg.sessionId.toUpperCase()))
@@ -206,7 +206,13 @@ function handleClientMessage(ws, msg) {
         return;
       }
 
-      const session = sessions.get(code);
+      let session = sessions.get(code);
+      if (!session) {
+        // Allow brief grace window (up to 1.5s) if primary create_session packet is in transit
+        await new Promise(r => setTimeout(r, 1500));
+        session = sessions.get(code);
+      }
+
       if (!session) {
         safeSend(ws, { type: 'error', error: `Workout session "${code}" not found or expired.` });
         return;

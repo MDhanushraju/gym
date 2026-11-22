@@ -364,7 +364,7 @@ export default function BackCameraNode({
               Enter the 6-character code displayed on the primary workout device to start synchronized posterior tracking.
             </p>
 
-            <div className="flex flex-col sm:flex-row items-center gap-2 w-full max-w-xs mb-3">
+            <div className="flex flex-col sm:flex-row items-center gap-2 w-full max-w-xs mb-2">
               <input
                 type="text"
                 placeholder="e.g. FF-8921"
@@ -375,16 +375,25 @@ export default function BackCameraNode({
               <button
                 onClick={() => handleJoinSession()}
                 disabled={isConnecting}
-                className="w-full sm:w-auto px-6 py-2.5 rounded-2xl bg-[#7F00FF] hover:bg-[#6E00DE] active:scale-95 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 shrink-0"
+                className="w-full sm:w-auto px-6 py-2.5 rounded-2xl bg-[#7F00FF] hover:bg-[#6E00DE] active:scale-95 text-white font-bold text-xs shadow-md transition-all flex items-center justify-center gap-1.5 shrink-0 cursor-pointer"
               >
                 {isConnecting ? <RefreshCw className="w-4 h-4 animate-spin" /> : 'Connect'}
               </button>
             </div>
 
+            <div className="text-[10px] text-white/60 mb-3 font-mono truncate max-w-xs">
+              Sync Server: {dualCameraClient.url}
+            </div>
+
             {errorMessage && (
-              <div className="p-2.5 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-xs flex items-center gap-1.5 max-w-xs">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{errorMessage}</span>
+              <div className="p-3 rounded-xl bg-red-500/20 border border-red-500/40 text-red-200 text-xs flex flex-col items-center gap-1 max-w-xs text-center animate-fade-in">
+                <div className="flex items-center gap-1.5 font-semibold">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{errorMessage}</span>
+                </div>
+                <span className="text-[10px] text-red-300">
+                  Make sure Phone #1 has the pairing screen open on the same workout.
+                </span>
               </div>
             )}
           </div>

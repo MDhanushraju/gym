@@ -15,6 +15,7 @@ export class DualCameraClient {
     this.listeners = new Map();
     this.shouldReconnect = true;
     this.pendingTelemetryThrottle = 0;
+    this.outboxQueue = [];
   }
 
   setWebSocketUrl(newUrl) {
@@ -85,8 +86,17 @@ export class DualCameraClient {
   connect() {
     return new Promise((resolve, reject) => {
       this.shouldReconnect = true;
-      if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         return resolve(this.ws);
+      }
+
+      const onOpened = () => {
+        resolve(this.ws);
+      };
+
+      if (this.ws && this.ws.readyState === WebSocket.CONNECTING) {
+        this.ws.addEventListener('open', onOpened, { once: true });
+        return;
       }
 
       try {
@@ -100,6 +110,17 @@ export class DualCameraClient {
         this.isConnected = true;
         this.reconnectAttempts = 0;
         this.emit('connection_changed', { isConnected: true });
+
+        // Flush queued non-telemetry control messages (e.g. create_session, join_session)
+        while (this.outboxQueue.length > 0) {
+          const item = this.outboxQueue.shift();
+          try {
+            this.ws.send(JSON.stringify(item));
+          } catch (e) {
+            console.warn('[DualCameraClient] Flush error:', e);
+          }
+        }
+
         resolve(this.ws);
       };
 
@@ -239,6 +260,10 @@ export class DualCameraClient {
         console.warn('[DualCameraClient] Send failed:', err);
         return false;
       }
+    }
+    // Queue non-telemetry control messages (e.g. create_session, join_session)
+    if (payload && payload.type !== 'secondary_pose_telemetry') {
+      this.outboxQueue.push(payload);
     }
     return false;
   }
