@@ -70,7 +70,7 @@ export class DualCameraClient {
       const hostname = window.location.hostname || 'localhost';
       // GitHub Pages does not run WebSockets on port 3001
       if (hostname.endsWith('github.io')) {
-        return 'wss://gym-backend-5oxw.onrender.com';
+        return 'wss://gym-blws.onrender.com';
       }
       const isHttps = window.location.protocol === 'https:';
       const wsProtocol = isHttps ? 'wss:' : 'ws:';
