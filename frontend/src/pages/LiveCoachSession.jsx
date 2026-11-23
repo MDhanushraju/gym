@@ -5,9 +5,9 @@ import {
   Sparkles, Compass, Eye, ShieldCheck, Play, Pause, ChevronRight, 
   PlayCircle, ToggleLeft, ToggleRight, Layers, HelpCircle, SwitchCamera,
   Flame, Gauge, Award, CheckSquare, TrendingUp, Check, XCircle, Info,
-  Maximize2, Minimize2, Download, Smartphone, QrCode, Wifi, WifiOff
+  Maximize2, Minimize2, Download, Smartphone, QrCode, Wifi, WifiOff, X
 } from 'lucide-react';
-import { drawSkeletonOnCanvas } from '../utils/skeletonRenderer';
+import { drawSkeletonOnCanvas, drawSecondaryExoskeletonPIP } from '../utils/skeletonRenderer';
 import { detectPoseForVideoFrame, initPoseLandmarker, generateKinematicLandmarks, isLandmarkerReady, getInitError, resetPoseLandmarker } from '../utils/poseDetection';
 import { analyzeFrontView, analyzeBackView } from '../utils/angleCalculator';
 import { getCoachPreferences, saveCoachPreferences } from '../utils/storage';
@@ -58,6 +58,12 @@ export default function LiveCoachSession({
   const [secondaryMetadata, setSecondaryMetadata] = useState(null);
   const [syncDeltaMs, setSyncDeltaMs] = useState(0);
   const [dualCameraCountdown, setDualCameraCountdown] = useState(null);
+  const [showSecondaryPip, setShowSecondaryPip] = useState(true);
+  const [secondaryPipExpanded, setSecondaryPipExpanded] = useState(false);
+  const showSecondaryPipRef = useRef(true);
+  const secondaryCanvasRef = useRef(null);
+  const lastSecondaryLandmarksRef = useRef(null);
+  const backChecklistRef = useRef(null);
 
   // Formanti State Machine & Repetition Telemetry
   const [engineState, setEngineState] = useState(ExerciseStates.WAITING_FOR_START);
@@ -186,6 +192,8 @@ export default function LiveCoachSession({
   useEffect(() => { showAdvancedOverlayRef.current = showAdvancedOverlay; }, [showAdvancedOverlay]);
   useEffect(() => { includeBackCheckRef.current = includeBackCheck; }, [includeBackCheck]);
   useEffect(() => { isSecondaryConnectedRef.current = isSecondaryConnected; }, [isSecondaryConnected]);
+  useEffect(() => { showSecondaryPipRef.current = showSecondaryPip; }, [showSecondaryPip]);
+  useEffect(() => { backChecklistRef.current = backChecklist; }, [backChecklist]);
 
   // Dual-Camera WebSocket Event Subscriptions
   useEffect(() => {
@@ -203,6 +211,8 @@ export default function LiveCoachSession({
         setSecondaryMetadata(msg.metadata);
         setIncludeBackCheck(true);
         includeBackCheckRef.current = true;
+        setShowSecondaryPip(true);
+        showSecondaryPipRef.current = true;
         voiceCoach.speak('Back camera connected. Dual tracking enabled.');
       }
     });
@@ -211,6 +221,7 @@ export default function LiveCoachSession({
       if (msg.peerRole === 'secondary') {
         setIsSecondaryConnected(false);
         isSecondaryConnectedRef.current = false;
+        lastSecondaryLandmarksRef.current = null;
         setSecondaryMetadata(null);
         poseSynchronizer.reset();
         voiceCoach.speak('Back camera disconnected. Continuing in front camera mode.');
@@ -241,6 +252,9 @@ export default function LiveCoachSession({
 
     const unsubSecondaryTelemetry = dualCameraClient.on('secondary_pose_telemetry', (msg) => {
       poseSynchronizer.pushSecondaryFrame(msg);
+      if (msg && msg.landmarks) {
+        lastSecondaryLandmarksRef.current = msg.landmarks;
+      }
     });
 
     return () => {
@@ -892,6 +906,25 @@ export default function LiveCoachSession({
               console.warn('drawSkeletonOnCanvas render warning:', drawErr);
             }
           }
+
+          // 3. Render Secondary Camera PIP Exoskeleton if connected & enabled
+          if (isSecondaryConnectedRef.current && showSecondaryPipRef.current && secondaryCanvasRef.current) {
+            try {
+              const secCanvas = secondaryCanvasRef.current;
+              const secCtx = secCanvas.getContext('2d');
+              if (secCtx) {
+                const curBackCheck = backChecklistRef.current;
+                drawSecondaryExoskeletonPIP(secCtx, lastSecondaryLandmarksRef.current, {
+                  width: secCanvas.width,
+                  height: secCanvas.height,
+                  isSpineGood: curBackCheck?.spineNeutrality?.type !== 'warn',
+                  lateralTiltDeg: curBackCheck?.spineNeutrality?.lateralTiltDeg || '0°'
+                });
+              }
+            } catch (secPipErr) {
+              console.warn('drawSecondaryExoskeletonPIP render warning:', secPipErr);
+            }
+          }
         }
       } catch (frameErr) {
         console.warn('analyzeFrame processing warning:', frameErr);
@@ -1342,11 +1375,27 @@ export default function LiveCoachSession({
                 <span>{isDemoStream ? 'Simulation Active' : (facingMode === 'environment' ? 'Rear Camera Active' : 'Front Camera Active')}</span>
               </div>
 
-              {/* Dual-Camera Active Badge */}
+              {/* Dual-Camera Active Badge & PIP Quick Toggle */}
               {isSecondaryConnected && (
-                <div className="px-3 py-1 rounded-full bg-[#16A34A] text-white text-xs font-bold shadow-sm flex items-center gap-1.5">
-                  <Wifi className="w-3.5 h-3.5" />
-                  <span>Dual-Cam Synced ({dualCameraSessionId})</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="px-3 py-1 rounded-full bg-[#16A34A] text-white text-xs font-bold shadow-sm flex items-center gap-1.5">
+                    <Wifi className="w-3.5 h-3.5" />
+                    <span>Dual-Cam Synced ({dualCameraSessionId})</span>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowSecondaryPip(prev => !prev)}
+                    className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm flex items-center gap-1.5 transition-all cursor-pointer ${
+                      showSecondaryPip
+                        ? 'bg-[#0284C7] hover:bg-[#0369A1] text-white'
+                        : 'bg-[#FFFFFF]/90 hover:bg-[#F3F0FF] border border-[#E2D9F3] text-[#2F3159]'
+                    }`}
+                    title="Toggle live Picture-in-Picture of 2nd Camera"
+                  >
+                    <Smartphone className="w-3.5 h-3.5" />
+                    <span>{showSecondaryPip ? '📱 2nd Cam (PIP ON)' : '📱 Show 2nd Cam PIP'}</span>
+                  </button>
                 </div>
               )}
 
@@ -1642,6 +1691,69 @@ export default function LiveCoachSession({
                       </button>
                     </div>
                   </div>
+                </div>
+              </div>
+            )}
+
+            {/* Live Secondary Back-Camera PIP Display (Phone #2 with Real-time Exoskeleton) */}
+            {isSecondaryConnected && showSecondaryPip && (
+              <div 
+                className={`absolute z-30 transition-all duration-300 shadow-2xl rounded-2xl overflow-hidden border border-slate-700/80 bg-slate-900/95 backdrop-blur-md flex flex-col ${
+                  secondaryPipExpanded 
+                    ? 'top-4 right-4 w-[280px] sm:w-[340px] h-[200px] sm:h-[240px]' 
+                    : 'top-4 right-4 w-[190px] sm:w-[240px] h-[140px] sm:h-[175px]'
+                }`}
+              >
+                {/* PIP Header Bar */}
+                <div className="flex items-center justify-between px-2.5 py-1.5 bg-slate-800/90 border-b border-slate-700/60 text-white select-none">
+                  <div className="flex items-center gap-1.5 text-[11px] font-bold">
+                    <Smartphone className="w-3.5 h-3.5 text-[#38BDF8]" />
+                    <span className="truncate max-w-[100px] sm:max-w-none">Back View (2nd Cam)</span>
+                    <span className="w-2 h-2 rounded-full bg-[#10B981] animate-pulse ml-0.5 shrink-0" />
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-[10px] font-mono text-[#38BDF8] mr-1">
+                      {syncDeltaMs}ms
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setSecondaryPipExpanded(prev => !prev)}
+                      className="p-1 hover:bg-white/10 rounded transition-colors text-white/70 hover:text-white cursor-pointer"
+                      title={secondaryPipExpanded ? "Minimize PIP" : "Expand PIP"}
+                      aria-label="Toggle PIP size"
+                    >
+                      {secondaryPipExpanded ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowSecondaryPip(false)}
+                      className="p-1 hover:bg-white/10 rounded transition-colors text-white/70 hover:text-white cursor-pointer"
+                      title="Hide PIP"
+                      aria-label="Close PIP"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* PIP Canvas Viewport */}
+                <div className="relative flex-1 w-full bg-[#020617] overflow-hidden flex items-center justify-center">
+                  <canvas
+                    ref={secondaryCanvasRef}
+                    width={secondaryPipExpanded ? 340 : 240}
+                    height={secondaryPipExpanded ? 240 : 175}
+                    className="w-full h-full object-contain"
+                  />
+                </div>
+
+                {/* PIP Footer Form Mini-Badge */}
+                <div className="flex items-center justify-between px-2.5 py-1 bg-slate-900/95 text-[10px] border-t border-slate-800">
+                  <span className={backChecklist?.spineNeutrality?.type === 'good' ? "text-[#10B981] font-bold" : "text-[#F59E0B] font-bold"}>
+                    Spine: {backChecklist?.spineNeutrality?.status || 'Active'}
+                  </span>
+                  <span className={backChecklist?.scapularRetraction?.type === 'good' ? "text-[#38BDF8] font-bold" : "text-[#F59E0B] font-bold"}>
+                    Scapula: {backChecklist?.scapularRetraction?.status || 'Active'}
+                  </span>
                 </div>
               </div>
             )}

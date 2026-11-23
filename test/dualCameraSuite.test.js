@@ -18,6 +18,7 @@ import {
 } from '../backend/server.js';
 import { PoseSynchronizer } from '../frontend/src/utils/poseSynchronizer.js';
 import { PureSquatEngine } from '../frontend/src/utils/pureSquatEngine.js';
+import { drawSecondaryExoskeletonPIP } from '../frontend/src/utils/skeletonRenderer.js';
 
 console.log('\n============================================================');
 console.log('   SYNCHRONIZED TWO-DEVICE CAMERA SUITE');
@@ -310,6 +311,59 @@ async function runWebSocketServerTests() {
 }
 
 await runWebSocketServerTests();
+
+// -------------------------------------------------------------
+// Test 6: Secondary Camera Picture-in-Picture Exoskeleton Rendering
+// -------------------------------------------------------------
+{
+  const calls = [];
+  const mockCtx = {
+    canvas: { width: 240, height: 160 },
+    clearRect: (...args) => calls.push(['clearRect', ...args]),
+    createLinearGradient: () => ({ addColorStop: () => {} }),
+    fillRect: (...args) => calls.push(['fillRect', ...args]),
+    beginPath: () => calls.push(['beginPath']),
+    moveTo: (...args) => calls.push(['moveTo', ...args]),
+    lineTo: (...args) => calls.push(['lineTo', ...args]),
+    stroke: () => calls.push(['stroke']),
+    arc: (...args) => calls.push(['arc', ...args]),
+    fill: () => calls.push(['fill']),
+    fillText: (...args) => calls.push(['fillText', ...args]),
+    save: () => calls.push(['save']),
+    restore: () => calls.push(['restore']),
+    setLineDash: () => {}
+  };
+
+  // 6A: Null / Empty state renders waiting text cleanly
+  calls.length = 0;
+  drawSecondaryExoskeletonPIP(mockCtx, null, { width: 240, height: 160 });
+  const hasAwaitingText = calls.some(c => c[0] === 'fillText' && c[1].includes('Awaiting'));
+  assert.ok(hasAwaitingText, 'Empty state must render placeholder waiting text');
+
+  // 6B: Live 33 landmarks render bones, spine and joint nodes
+  calls.length = 0;
+  const mockLandmarks = [];
+  for (let i = 0; i < 33; i++) {
+    mockLandmarks.push({ x: 0.5, y: 0.5, z: 0, visibility: 0.9 });
+  }
+  mockLandmarks[11] = { x: 0.42, y: 0.25, visibility: 0.95 }; // left shoulder
+  mockLandmarks[12] = { x: 0.58, y: 0.25, visibility: 0.95 }; // right shoulder
+  mockLandmarks[23] = { x: 0.44, y: 0.55, visibility: 0.95 }; // left hip
+  mockLandmarks[24] = { x: 0.56, y: 0.55, visibility: 0.95 }; // right hip
+
+  drawSecondaryExoskeletonPIP(mockCtx, mockLandmarks, {
+    width: 240,
+    height: 160,
+    isSpineGood: true,
+    lateralTiltDeg: '1°'
+  });
+
+  const linesDrawn = calls.filter(c => c[0] === 'lineTo').length;
+  const arcsDrawn = calls.filter(c => c[0] === 'arc').length;
+  assert.ok(linesDrawn > 10, 'Must draw skeletal bone connections in PIP');
+  assert.ok(arcsDrawn >= 10, 'Must draw joint dots and spinal anchors in PIP');
+  console.log('✓ Test 6: Secondary Camera PIP exoskeleton rendering verified');
+}
 
 console.log('\n============================================================');
 console.log('   SUITE RESULT: ALL DUAL-CAMERA TESTS PASSED PERFECTLY!');

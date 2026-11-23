@@ -570,3 +570,165 @@ function drawGhostHeaderBadge(ctx, x, y, text) {
   ctx.fillText(text, x, y);
   ctx.restore();
 }
+
+/**
+ * =========================================================================
+ * LAYER 5: SECONDARY CAMERA PICTURE-IN-PICTURE (PIP) EXOSKELETON RENDERER
+ * =========================================================================
+ * Renders live back-view skeleton telemetry received from Phone #2 onto a
+ * high-contrast dark biomechanical radar canvas for real-time dual-view guidance.
+ */
+export function drawSecondaryExoskeletonPIP(ctx, landmarks, options = {}) {
+  if (!ctx) return;
+  const canvas = ctx.canvas;
+  const width = options.width || canvas?.width || 260;
+  const height = options.height || canvas?.height || 160;
+
+  // 1. Draw Obsidian / Cybernetic Athletic Background
+  ctx.clearRect(0, 0, width, height);
+
+  const grad = ctx.createLinearGradient(0, 0, 0, height);
+  grad.addColorStop(0, '#0F172A'); // Slate-900
+  grad.addColorStop(1, '#020617'); // Slate-950
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  // Subtle crosshair grid
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+  ctx.lineWidth = 1;
+  const gridSize = 24;
+  for (let x = gridSize; x < width; x += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(x, 0);
+    ctx.lineTo(x, height);
+    ctx.stroke();
+  }
+  for (let y = gridSize; y < height; y += gridSize) {
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(width, y);
+    ctx.stroke();
+  }
+
+  // Central Vertical Reference Guideline (Plumb line for spinal vertical alignment)
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+  ctx.setLineDash([3, 3]);
+  ctx.beginPath();
+  ctx.moveTo(width / 2, 8);
+  ctx.lineTo(width / 2, height - 8);
+  ctx.stroke();
+  ctx.setLineDash([]);
+
+  // Empty state if no landmarks yet
+  if (!landmarks || landmarks.length === 0) {
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('Awaiting Back-View Pose...', width / 2, height / 2 - 8);
+    ctx.font = '9px sans-serif';
+    ctx.fillStyle = 'rgba(148, 163, 184, 0.4)';
+    ctx.fillText('Position Phone #2 behind you', width / 2, height / 2 + 10);
+    return;
+  }
+
+  // Coordinate projection to PIP viewport
+  const toPipPixels = (lm) => {
+    if (!lm) return { x: 0, y: 0, visibility: 0 };
+    return {
+      x: lm.x * width,
+      y: lm.y * height,
+      visibility: lm.visibility !== undefined ? lm.visibility : 1
+    };
+  };
+
+  const isSpineGood = options.isSpineGood !== false;
+  const spineColor = isSpineGood ? '#10B981' : '#EF4444'; // Emerald green vs Alert red
+
+  // 2. Draw Skeleton Limbs and Bones
+  ctx.lineWidth = 2.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  for (const [idxA, idxB] of SKELETON_CONNECTIONS) {
+    const lmA = landmarks[idxA];
+    const lmB = landmarks[idxB];
+    if (!lmA || !lmB) continue;
+
+    const visA = lmA.visibility !== undefined ? lmA.visibility : 1;
+    const visB = lmB.visibility !== undefined ? lmB.visibility : 1;
+    if (visA < 0.25 || visB < 0.25) continue;
+
+    const pA = toPipPixels(lmA);
+    const pB = toPipPixels(lmB);
+
+    // Torso and spine framing
+    const isTorsoBone = (idxA === 11 && idxB === 12) || 
+                        (idxA === 23 && idxB === 24) || 
+                        (idxA === 11 && idxB === 23) || 
+                        (idxA === 12 && idxB === 24);
+
+    ctx.beginPath();
+    ctx.moveTo(pA.x, pA.y);
+    ctx.lineTo(pB.x, pB.y);
+    ctx.strokeStyle = isTorsoBone ? spineColor : 'rgba(56, 189, 248, 0.75)'; // vibrant cyan
+    ctx.stroke();
+  }
+
+  // 3. Highlight Posterior Spine Column (Upper Spine to Sacrum)
+  const leftShoulder = landmarks[11];
+  const rightShoulder = landmarks[12];
+  const leftHip = landmarks[23];
+  const rightHip = landmarks[24];
+
+  if (leftShoulder && rightShoulder && leftHip && rightHip) {
+    const midShoulderX = ((leftShoulder.x + rightShoulder.x) / 2) * width;
+    const midShoulderY = ((leftShoulder.y + rightShoulder.y) / 2) * height;
+    const midHipX = ((leftHip.x + rightHip.x) / 2) * width;
+    const midHipY = ((leftHip.y + rightHip.y) / 2) * height;
+
+    // Glowing spinal column line
+    ctx.save();
+    ctx.lineWidth = 3.5;
+    ctx.strokeStyle = spineColor;
+    ctx.shadowColor = spineColor;
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.moveTo(midShoulderX, midShoulderY);
+    ctx.lineTo(midHipX, midHipY);
+    ctx.stroke();
+    ctx.restore();
+
+    // Upper and lower spine anchor points
+    ctx.beginPath();
+    ctx.arc(midShoulderX, midShoulderY, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = spineColor;
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(midHipX, midHipY, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = spineColor;
+    ctx.fill();
+  }
+
+  // 4. Draw Joint Nodes (Body joints 11 to 32)
+  for (let i = 11; i <= 32; i++) {
+    const lm = landmarks[i];
+    if (!lm) continue;
+    const vis = lm.visibility !== undefined ? lm.visibility : 1;
+    if (vis < 0.3) continue;
+
+    const p = toPipPixels(lm);
+    const isCore = (i === 11 || i === 12 || i === 23 || i === 24);
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, isCore ? 3.5 : 2.5, 0, 2 * Math.PI);
+    ctx.fillStyle = isCore ? '#FACC15' : '#38BDF8';
+    ctx.fill();
+  }
+
+  // 5. Minimal Corner Watermark
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.45)';
+  ctx.font = '8px monospace';
+  ctx.textAlign = 'left';
+  ctx.fillText('POSTERIOR 3D', 8, 14);
+}
