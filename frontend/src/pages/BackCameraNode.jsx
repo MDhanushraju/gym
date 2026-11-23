@@ -202,58 +202,66 @@ export default function BackCameraNode({
   // 5. Pose Detection & Telemetry Relay Loop
   useEffect(() => {
     const runDetection = () => {
-      if (videoRef.current && videoRef.current.readyState >= 2 && canvasRef.current && isCameraActive) {
-        const video = videoRef.current;
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
+      try {
+        if (videoRef.current && videoRef.current.readyState >= 2 && canvasRef.current && isCameraActive) {
+          const video = videoRef.current;
+          const canvas = canvasRef.current;
+          const ctx = canvas.getContext('2d');
 
-        if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
-          canvas.width = video.clientWidth || 640;
-          canvas.height = video.clientHeight || 480;
-        }
+          if (canvas.width !== video.clientWidth || canvas.height !== video.clientHeight) {
+            canvas.width = video.clientWidth || 640;
+            canvas.height = video.clientHeight || 480;
+          }
 
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // FPS calculation
-        fpsTimerRef.current.count++;
-        const now = performance.now();
-        if (now - fpsTimerRef.current.lastTime >= 1000) {
-          setCameraFps(Math.round((fpsTimerRef.current.count * 1000) / (now - fpsTimerRef.current.lastTime)));
-          fpsTimerRef.current.count = 0;
-          fpsTimerRef.current.lastTime = now;
-        }
+          // FPS calculation
+          fpsTimerRef.current.count++;
+          const now = performance.now();
+          if (now - fpsTimerRef.current.lastTime >= 1000) {
+            setCameraFps(Math.round((fpsTimerRef.current.count * 1000) / (now - fpsTimerRef.current.lastTime)));
+            fpsTimerRef.current.count = 0;
+            fpsTimerRef.current.lastTime = now;
+          }
 
-        if (isLandmarkerReady()) {
-          const timestamp = performance.now();
-          const result = detectPoseForVideoFrame(video, timestamp);
+          if (isLandmarkerReady()) {
+            const timestamp = performance.now();
+            const result = detectPoseForVideoFrame(video, timestamp);
 
-          if (result && result.landmarks && result.landmarks.length > 0) {
-            const rawLandmarks = result.landmarks[0];
-            setIsPoseDetected(true);
+            if (result && result.landmarks && result.landmarks.length > 0) {
+              const rawLandmarks = result.landmarks[0];
+              setIsPoseDetected(true);
 
-            // Transmit minimal landmark telemetry to primary device via WebSocket
-            dualCameraClient.sendPoseTelemetry(
-              rawLandmarks,
-              1.0,
-              { w: video.videoWidth || 1280, h: video.videoHeight || 720 }
-            );
+              // Transmit minimal landmark telemetry to primary device via WebSocket
+              dualCameraClient.sendPoseTelemetry(
+                rawLandmarks,
+                1.0,
+                { w: video.videoWidth || 1280, h: video.videoHeight || 720 }
+              );
 
-            // Render skeleton overlay on back camera view
-            drawSkeletonOnCanvas(ctx, rawLandmarks, {
-              showUserSkeleton: true,
-              showGhostTarget: false,
-              isMirrored: facingModeRef.current === 'user',
-              videoWidth: video.videoWidth || 640,
-              videoHeight: video.videoHeight || 480,
-              exerciseId: 'basic-squats'
-            });
-          } else {
-            setIsPoseDetected(false);
+              // Render skeleton overlay on back camera view
+              try {
+                drawSkeletonOnCanvas(ctx, rawLandmarks, {
+                  showUserSkeleton: true,
+                  showGhostTarget: false,
+                  isMirrored: facingModeRef.current === 'user',
+                  videoWidth: video.videoWidth || 640,
+                  videoHeight: video.videoHeight || 480,
+                  exerciseId: 'basic-squats'
+                });
+              } catch (drawErr) {
+                console.warn('Back camera skeleton draw warning:', drawErr);
+              }
+            } else {
+              setIsPoseDetected(false);
+            }
           }
         }
+      } catch (err) {
+        console.warn('BackCameraNode detection warning:', err);
+      } finally {
+        animFrameRef.current = requestAnimationFrame(runDetection);
       }
-
-      animFrameRef.current = requestAnimationFrame(runDetection);
     };
 
     animFrameRef.current = requestAnimationFrame(runDetection);

@@ -630,262 +630,276 @@ export default function LiveCoachSession({
         return;
       }
 
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
+      try {
+        const video = videoRef.current;
+        const canvas = canvasRef.current;
 
-      if (canvas) {
-        const container = canvas.parentElement;
-        const targetW = container?.clientWidth || 640;
-        const targetH = container?.clientHeight || 480;
-        if (canvas.width !== targetW || canvas.height !== targetH) {
-          canvas.width = targetW;
-          canvas.height = targetH;
-        }
+        if (canvas) {
+          const container = canvas.parentElement;
+          const targetW = container?.clientWidth || 640;
+          const targetH = container?.clientHeight || 480;
+          if (canvas.width !== targetW || canvas.height !== targetH) {
+            canvas.width = targetW;
+            canvas.height = targetH;
+          }
 
-        if (canvasDimensionsRef.current.w !== canvas.width || canvasDimensionsRef.current.h !== canvas.height) {
-          canvasDimensionsRef.current = { w: canvas.width, h: canvas.height };
-          setCanvasDimensions({ w: canvas.width, h: canvas.height });
-        }
+          if (canvasDimensionsRef.current.w !== canvas.width || canvasDimensionsRef.current.h !== canvas.height) {
+            canvasDimensionsRef.current = { w: canvas.width, h: canvas.height };
+            setCanvasDimensions({ w: canvas.width, h: canvas.height });
+          }
 
-        if (video && (video.videoWidth !== videoDimensionsRef.current.w || video.videoHeight !== videoDimensionsRef.current.h)) {
-          videoDimensionsRef.current = { w: video.videoWidth, h: video.videoHeight };
-          setVideoDimensions({ w: video.videoWidth, h: video.videoHeight });
-        }
+          if (video && (video.videoWidth !== videoDimensionsRef.current.w || video.videoHeight !== videoDimensionsRef.current.h)) {
+            videoDimensionsRef.current = { w: video.videoWidth, h: video.videoHeight };
+            setVideoDimensions({ w: video.videoWidth, h: video.videoHeight });
+          }
 
-        const ctx = canvas.getContext('2d');
-        // REQUIREMENT 1: ALWAYS CLEAR FIRST unconditionally on EVERY frame before any branch
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
+          const ctx = canvas.getContext('2d');
+          // REQUIREMENT 1: ALWAYS CLEAR FIRST unconditionally on EVERY frame before any branch
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        const nowMs = performance.now();
-        if (nowMs - lastStatsTime >= 1000) {
-          setDebugActiveLoops(activeLoopsCountRef.current);
-          setDebugDrawCalls(1);
-          lastStatsTime = nowMs;
-        }
-        let landmarksToDraw = null;
-        let highlightedJoints = [];
+          const nowMs = performance.now();
+          if (nowMs - lastStatsTime >= 1000) {
+            setDebugActiveLoops(activeLoopsCountRef.current);
+            setDebugDrawCalls(1);
+            lastStatsTime = nowMs;
+          }
+          let landmarksToDraw = null;
+          let highlightedJoints = [];
 
-        const hasLiveWebcam = !isDemoStream && video && video.readyState >= 2 && streamRef.current;
+          const hasLiveWebcam = !isDemoStream && video && video.readyState >= 2 && streamRef.current;
 
-        if (hasLiveWebcam) {
-          const videoTimeChanged = (video.currentTime !== lastVideoTimeRef.current);
+          if (hasLiveWebcam) {
+            const videoTimeChanged = (video.currentTime !== lastVideoTimeRef.current);
 
-          if (videoTimeChanged) {
-            lastVideoTimeRef.current = video.currentTime;
-            cameraFrameCounterRef.current++;
-            const frameTimestamp = Math.round(video.currentTime * 1000);
+            if (videoTimeChanged) {
+              lastVideoTimeRef.current = video.currentTime;
+              cameraFrameCounterRef.current++;
+              const frameTimestamp = Math.round(video.currentTime * 1000);
 
-            try {
-              const livePose = detectPoseForVideoFrame(video, frameTimestamp);
-              if (livePose && livePose.landmarks) {
-                landmarksToDraw = livePose.landmarks;
-                lastLandmarksRef.current = livePose.landmarks;
-                setHasReceivedFrames(true);
-              } else {
+              try {
+                const livePose = detectPoseForVideoFrame(video, frameTimestamp);
+                if (livePose && livePose.landmarks) {
+                  landmarksToDraw = livePose.landmarks;
+                  lastLandmarksRef.current = livePose.landmarks;
+                  setHasReceivedFrames(true);
+                } else {
+                  landmarksToDraw = null;
+                  lastLandmarksRef.current = null;
+                }
+              } catch (e) {
                 landmarksToDraw = null;
                 lastLandmarksRef.current = null;
               }
-            } catch (e) {
-              landmarksToDraw = null;
-              lastLandmarksRef.current = null;
-            }
 
-            // Real-time engine processFrame: passed real timestamp, video dimensions, and null on lost tracking
-            if (engineRef.current) {
-              engineRef.current.processFrame(
-                landmarksToDraw,
-                frameTimestamp,
-                { videoWidth: video.videoWidth, videoHeight: video.videoHeight }
-              );
-            }
-
-            // Front View Biomechanical checks (throttled to 4Hz to prevent React render thrashing)
-            if (landmarksToDraw && (nowMs - lastChecklistTimeRef.current >= 250)) {
-              lastChecklistTimeRef.current = nowMs;
-              const frontResult = analyzeFrontView(landmarksToDraw);
-              if (frontResult) {
-                setFrontChecklist({
-                  kneeAlignment: { 
-                    label: 'Knee Tracking & Valgus', 
-                    status: frontResult.kneeAlignment.status, 
-                    type: frontResult.kneeAlignment.isGood ? 'good' : 'warn' 
-                  },
-                  shoulderLevel: { 
-                    label: 'Shoulder Level Symmetry', 
-                    status: frontResult.shoulderLevel.status, 
-                    type: frontResult.shoulderLevel.isGood ? 'good' : 'warn' 
-                  },
-                  elbowDrive: { 
-                    label: 'Elbow Elevation & Lead', 
-                    status: frontResult.elbowSymmetry.status, 
-                    type: frontResult.elbowSymmetry.isGood ? 'good' : 'warn' 
-                  }
-                });
-
-                if (!frontResult.kneeAlignment.isGood) highlightedJoints.push(25, 26);
-                if (!frontResult.shoulderLevel.isGood) highlightedJoints.push(11, 12);
+              // Real-time engine processFrame: passed real timestamp, video dimensions, and null on lost tracking
+              if (engineRef.current) {
+                engineRef.current.processFrame(
+                  landmarksToDraw,
+                  frameTimestamp,
+                  { videoWidth: video.videoWidth, videoHeight: video.videoHeight }
+                );
               }
 
-              // Optional Back View checks (Single camera fallback OR synchronized dual-camera telemetry)
-              if (includeBackCheckRef.current) {
-                let backResult = null;
-                if (isSecondaryConnectedRef.current) {
-                  const syncResult = poseSynchronizer.matchAndAnalyze(timestamp);
-                  if (syncResult && syncResult.posteriorAnalysis) {
-                    backResult = syncResult.posteriorAnalysis;
-                    setSyncDeltaMs(Math.round(syncResult.deltaMs));
-                  }
-                } else {
-                  backResult = analyzeBackView(landmarksToDraw);
-                }
+              // Front View Biomechanical checks (throttled to 4Hz to prevent React render thrashing)
+              if (landmarksToDraw && (nowMs - lastChecklistTimeRef.current >= 250)) {
+                lastChecklistTimeRef.current = nowMs;
+                try {
+                  const frontResult = analyzeFrontView(landmarksToDraw);
+                  if (frontResult) {
+                    setFrontChecklist({
+                      kneeAlignment: { 
+                        label: 'Knee Tracking & Valgus', 
+                        status: frontResult.kneeAlignment?.status || 'Correct', 
+                        type: frontResult.kneeAlignment?.isGood ? 'good' : 'warn' 
+                      },
+                      shoulderLevel: { 
+                        label: 'Shoulder Level Symmetry', 
+                        status: frontResult.shoulderLevel?.status || 'Correct', 
+                        type: frontResult.shoulderLevel?.isGood ? 'good' : 'warn' 
+                      },
+                      elbowDrive: { 
+                        label: 'Elbow Elevation & Lead', 
+                        status: frontResult.elbowSymmetry?.status || 'Correct', 
+                        type: frontResult.elbowSymmetry?.isGood ? 'good' : 'warn' 
+                      }
+                    });
 
-                if (backResult) {
-                  setBackChecklist({
-                    spineNeutrality: { 
-                      label: 'Spine Lateral Neutrality', 
-                      status: backResult.spineNeutrality.status, 
-                      type: backResult.spineNeutrality.isGood ? 'good' : 'warn' 
-                    },
-                    scapularRetraction: { 
-                      label: 'Scapular Retraction', 
-                      status: backResult.scapularRetraction.status, 
-                      type: backResult.scapularRetraction.isGood ? 'good' : 'warn' 
-                    },
-                    lumbarPosture: { 
-                      label: 'Lumbar Alignment', 
-                      status: backResult.lumbarAlignment?.status || 'Correct', 
-                      type: backResult.lumbarAlignment?.isGood ? 'good' : 'warn' 
+                    if (!frontResult.kneeAlignment?.isGood) highlightedJoints.push(25, 26);
+                    if (!frontResult.shoulderLevel?.isGood) highlightedJoints.push(11, 12);
+                  }
+
+                  // Optional Back View checks (Single camera fallback OR synchronized dual-camera telemetry)
+                  if (includeBackCheckRef.current) {
+                    let backResult = null;
+                    if (isSecondaryConnectedRef.current) {
+                      const syncResult = poseSynchronizer.matchAndAnalyze(Date.now());
+                      if (syncResult && syncResult.posteriorAnalysis) {
+                        backResult = syncResult.posteriorAnalysis;
+                        setSyncDeltaMs(Math.round(syncResult.deltaMs || 0));
+                      }
+                    } else {
+                      backResult = analyzeBackView(landmarksToDraw);
                     }
-                  });
+
+                    if (backResult) {
+                      setBackChecklist({
+                        spineNeutrality: { 
+                          label: 'Spine Lateral Neutrality', 
+                          status: backResult.spineNeutrality?.status || 'Correct', 
+                          type: backResult.spineNeutrality?.isGood ? 'good' : 'warn' 
+                        },
+                        scapularRetraction: { 
+                          label: 'Scapular Retraction', 
+                          status: backResult.scapularRetraction?.status || 'Correct', 
+                          type: backResult.scapularRetraction?.isGood ? 'good' : 'warn' 
+                        },
+                        lumbarPosture: { 
+                          label: 'Lumbar Alignment', 
+                          status: backResult.lumbarAlignment?.status || 'Correct', 
+                          type: backResult.lumbarAlignment?.isGood ? 'good' : 'warn' 
+                        }
+                      });
+                    }
+                  }
+                } catch (checklistErr) {
+                  console.warn('Biomechanical checklist update warning:', checklistErr);
                 }
               }
+            } else {
+              landmarksToDraw = lastLandmarksRef.current;
+            }
+          } else if (isDemoStream) {
+            // Simulation demo mode
+            repCycleProgress = (repCycleProgress + 0.009) % 1;
+            renderSyntheticExerciseFrame(ctx, exercise.id, repCycleProgress, false);
+            landmarksToDraw = generateKinematicLandmarks(exercise.id, repCycleProgress, false);
+
+            if (engineRef.current) {
+              engineRef.current.isCalibrated = true;
+              engineRef.current.processFrame(landmarksToDraw, Math.round(nowMs), { videoWidth: 640, videoHeight: 480 });
             }
           } else {
-            landmarksToDraw = lastLandmarksRef.current;
-          }
-        } else if (isDemoStream) {
-          // Simulation demo mode
-          repCycleProgress = (repCycleProgress + 0.009) % 1;
-          renderSyntheticExerciseFrame(ctx, exercise.id, repCycleProgress, false);
-          landmarksToDraw = generateKinematicLandmarks(exercise.id, repCycleProgress, false);
-
-          if (engineRef.current) {
-            engineRef.current.isCalibrated = true;
-            engineRef.current.processFrame(landmarksToDraw, Math.round(nowMs), { videoWidth: 640, videoHeight: 480 });
-          }
-        } else {
-          landmarksToDraw = null;
-          if (engineRef.current) {
-            engineRef.current.processFrame(null, Math.round(nowMs), { videoWidth: 640, videoHeight: 480 });
-          }
-        }
-
-        // 1. Separate Camera FPS vs Processing FPS Tracking (Requirements 1, 3, 9)
-        processingFrameCounterRef.current++;
-        if (video && video.currentTime !== lastVideoTimeRef.current) {
-          lastVideoTimeRef.current = video.currentTime;
-          cameraFrameCounterRef.current++;
-        }
-
-        if (nowMs - processingLastFpsTimeRef.current >= 1000) {
-          const elapsed = (nowMs - processingLastFpsTimeRef.current) / 1000;
-          setProcessingFps(Math.max(1, Math.round(processingFrameCounterRef.current / elapsed)));
-          setCameraFps(Math.round(cameraFrameCounterRef.current / elapsed) || (isDemoStream ? 30 : 0));
-          setCurrentFrameTimestamp(Math.round(nowMs));
-          processingFrameCounterRef.current = 0;
-          cameraFrameCounterRef.current = 0;
-          processingLastFpsTimeRef.current = nowMs;
-        }
-
-        // 2. Real-time Pose Extraction & Telemetry Logging Buffer (Requirement 8)
-        if (landmarksToDraw) {
-          setIsPoseDetected(true);
-
-          const sL = landmarksToDraw[11], sR = landmarksToDraw[12];
-          const eL = landmarksToDraw[13], eR = landmarksToDraw[14];
-          const wL = landmarksToDraw[15], wR = landmarksToDraw[16];
-          const hL = landmarksToDraw[23], hR = landmarksToDraw[24];
-          const kL = landmarksToDraw[25], kR = landmarksToDraw[26];
-          const aL = landmarksToDraw[27], aR = landmarksToDraw[28];
-
-          const curTelem = depthTelemetryRef.current || {};
-          const frameRecord = {
-            timestamp: Math.round(nowMs),
-            timeSec: +(nowMs / 1000).toFixed(2),
-            exercise: exercise.name,
-            state: engineStateRef.current,
-            direction: curTelem.direction || 'HOLD',
-            confidence: Math.round(trackingConfidence || 95),
-            jointAngles: {
-              leftElbow: curTelem.leftElbowAngle ?? liveAngleRef.current ?? 160,
-              rightElbow: curTelem.rightElbowAngle ?? liveAngleRef.current ?? 160,
-              leftShoulder: curTelem.leftShoulderAngle ?? 90,
-              rightShoulder: curTelem.rightShoulderAngle ?? 90,
-              hipAlignment: curTelem.hipAlignment ?? 170,
-              kneeAngle: curTelem.kneeAngle ?? 168
-            },
-            displacements: {
-              shoulderY: curTelem.shoulderDisp ?? 0,
-              hipY: curTelem.hipDisp ?? 0,
-              amplitude: curTelem.elbowFlexion ?? 0
-            },
-            rawLandmarks: landmarksToDraw.map(p => ({
-              x: +p.x.toFixed(4),
-              y: +p.y.toFixed(4),
-              z: +(p.z || 0).toFixed(4),
-              visibility: +(p.visibility || 0.9).toFixed(2)
-            })),
-            landmarks: {
-              leftShoulder: sL ? { x: +sL.x.toFixed(3), y: +sL.y.toFixed(3), z: +(sL.z || 0).toFixed(3), vis: +(sL.visibility || 0.8).toFixed(2) } : null,
-              rightShoulder: sR ? { x: +sR.x.toFixed(3), y: +sR.y.toFixed(3), z: +(sR.z || 0).toFixed(3), vis: +(sR.visibility || 0.8).toFixed(2) } : null,
-              leftElbow: eL ? { x: +eL.x.toFixed(3), y: +eL.y.toFixed(3), z: +(eL.z || 0).toFixed(3), vis: +(eL.visibility || 0.8).toFixed(2) } : null,
-              rightElbow: eR ? { x: +eR.x.toFixed(3), y: +eR.y.toFixed(3), z: +(eR.z || 0).toFixed(3), vis: +(eR.visibility || 0.8).toFixed(2) } : null,
-              leftWrist: wL ? { x: +wL.x.toFixed(3), y: +wL.y.toFixed(3), z: +(wL.z || 0).toFixed(3), vis: +(wL.visibility || 0.8).toFixed(2) } : null,
-              rightWrist: wR ? { x: +wR.x.toFixed(3), y: +wR.y.toFixed(3), z: +(wR.z || 0).toFixed(3), vis: +(wR.visibility || 0.8).toFixed(2) } : null,
-              leftHip: hL ? { x: +hL.x.toFixed(3), y: +hL.y.toFixed(3), z: +(hL.z || 0).toFixed(3), vis: +(hL.visibility || 0.8).toFixed(2) } : null,
-              rightHip: hR ? { x: +hR.x.toFixed(3), y: +hR.y.toFixed(3), z: +(hR.z || 0).toFixed(3), vis: +(hR.visibility || 0.8).toFixed(2) } : null,
-              leftKnee: kL ? { x: +kL.x.toFixed(3), y: +kL.y.toFixed(3), z: +(kL.z || 0).toFixed(3), vis: +(kL.visibility || 0.8).toFixed(2) } : null,
-              rightKnee: kR ? { x: +kR.x.toFixed(3), y: +kR.y.toFixed(3), z: +(kR.z || 0).toFixed(3), vis: +(kR.visibility || 0.8).toFixed(2) } : null,
-              leftAnkle: aL ? { x: +aL.x.toFixed(3), y: +aL.y.toFixed(3), z: +(aL.z || 0).toFixed(3), vis: +(aL.visibility || 0.8).toFixed(2) } : null,
-              rightAnkle: aR ? { x: +aR.x.toFixed(3), y: +aR.y.toFixed(3), z: +(aR.z || 0).toFixed(3), vis: +(aR.visibility || 0.8).toFixed(2) } : null
+            landmarksToDraw = null;
+            if (engineRef.current) {
+              engineRef.current.processFrame(null, Math.round(nowMs), { videoWidth: 640, videoHeight: 480 });
             }
-          };
-
-          telemetryBufferRef.current.push(frameRecord);
-          if (telemetryBufferRef.current.length > 1000) {
-            telemetryBufferRef.current.shift();
           }
-        } else {
-          setIsPoseDetected(false);
-        }
 
-        // Render minimal skeleton overlay (reads directly from active refs for solid 60fps)
-        if (showSkeletonRef.current && landmarksToDraw) {
-          drawSkeletonOnCanvas(ctx, landmarksToDraw, {
-            showUserSkeleton: showUserSkeletonRef.current,
-            showGhostTarget: showGhostTargetRef.current,
-            showAdvancedOverlay: showAdvancedOverlayRef.current,
-            showDualExoskeleton: showGhostTargetRef.current && showAdvancedOverlayRef.current,
-            showAngles: showAdvancedOverlayRef.current,
-            showDepthHUD: showAdvancedOverlayRef.current,
-            isCalibrated: isCalibrated,
-            isMirrored: !isDemoStream && (facingModeRef.current === 'user'),
-            videoWidth: video?.videoWidth || 640,
-            videoHeight: video?.videoHeight || 480,
-            highlightedJoints,
-            exerciseId: exercise.id,
-            depthPercentage: depthPercentageRef.current,
-            currentAngle: depthTelemetryRef.current.currentAngle || liveAngleRef.current,
-            targetAngle: depthTelemetryRef.current.targetAngle || 90,
-            needToBend: depthTelemetryRef.current.needToBend,
-            jointLabel: depthTelemetryRef.current.jointLabel || (isSquatExercise ? 'Hip Depth' : 'Elbow'),
-            currentState: engineStateRef.current,
-            formStatus: formStatusRef.current
-          });
+          // 1. Separate Camera FPS vs Processing FPS Tracking (Requirements 1, 3, 9)
+          processingFrameCounterRef.current++;
+          if (video && video.currentTime !== lastVideoTimeRef.current) {
+            lastVideoTimeRef.current = video.currentTime;
+            cameraFrameCounterRef.current++;
+          }
+
+          if (nowMs - processingLastFpsTimeRef.current >= 1000) {
+            const elapsed = (nowMs - processingLastFpsTimeRef.current) / 1000;
+            setProcessingFps(Math.max(1, Math.round(processingFrameCounterRef.current / elapsed)));
+            setCameraFps(Math.round(cameraFrameCounterRef.current / elapsed) || (isDemoStream ? 30 : 0));
+            setCurrentFrameTimestamp(Math.round(nowMs));
+            processingFrameCounterRef.current = 0;
+            cameraFrameCounterRef.current = 0;
+            processingLastFpsTimeRef.current = nowMs;
+          }
+
+          // 2. Real-time Pose Extraction & Telemetry Logging Buffer (Requirement 8)
+          if (landmarksToDraw) {
+            setIsPoseDetected(true);
+
+            const sL = landmarksToDraw[11], sR = landmarksToDraw[12];
+            const eL = landmarksToDraw[13], eR = landmarksToDraw[14];
+            const wL = landmarksToDraw[15], wR = landmarksToDraw[16];
+            const hL = landmarksToDraw[23], hR = landmarksToDraw[24];
+            const kL = landmarksToDraw[25], kR = landmarksToDraw[26];
+            const aL = landmarksToDraw[27], aR = landmarksToDraw[28];
+
+            const curTelem = depthTelemetryRef.current || {};
+            const frameRecord = {
+              timestamp: Math.round(nowMs),
+              timeSec: +(nowMs / 1000).toFixed(2),
+              exercise: exercise.name,
+              state: engineStateRef.current,
+              direction: curTelem.direction || 'HOLD',
+              confidence: Math.round(trackingConfidence || 95),
+              jointAngles: {
+                leftElbow: curTelem.leftElbowAngle ?? liveAngleRef.current ?? 160,
+                rightElbow: curTelem.rightElbowAngle ?? liveAngleRef.current ?? 160,
+                leftShoulder: curTelem.leftShoulderAngle ?? 90,
+                rightShoulder: curTelem.rightShoulderAngle ?? 90,
+                hipAlignment: curTelem.hipAlignment ?? 170,
+                kneeAngle: curTelem.kneeAngle ?? 168
+              },
+              displacements: {
+                shoulderY: curTelem.shoulderDisp ?? 0,
+                hipY: curTelem.hipDisp ?? 0,
+                amplitude: curTelem.elbowFlexion ?? 0
+              },
+              rawLandmarks: landmarksToDraw.map(p => ({
+                x: +p.x.toFixed(4),
+                y: +p.y.toFixed(4),
+                z: +(p.z || 0).toFixed(4),
+                visibility: +(p.visibility || 0.9).toFixed(2)
+              })),
+              landmarks: {
+                leftShoulder: sL ? { x: +sL.x.toFixed(3), y: +sL.y.toFixed(3), z: +(sL.z || 0).toFixed(3), vis: +(sL.visibility || 0.8).toFixed(2) } : null,
+                rightShoulder: sR ? { x: +sR.x.toFixed(3), y: +sR.y.toFixed(3), z: +(sR.z || 0).toFixed(3), vis: +(sR.visibility || 0.8).toFixed(2) } : null,
+                leftElbow: eL ? { x: +eL.x.toFixed(3), y: +eL.y.toFixed(3), z: +(eL.z || 0).toFixed(3), vis: +(eL.visibility || 0.8).toFixed(2) } : null,
+                rightElbow: eR ? { x: +eR.x.toFixed(3), y: +eR.y.toFixed(3), z: +(eR.z || 0).toFixed(3), vis: +(eR.visibility || 0.8).toFixed(2) } : null,
+                leftWrist: wL ? { x: +wL.x.toFixed(3), y: +wL.y.toFixed(3), z: +(wL.z || 0).toFixed(3), vis: +(wL.visibility || 0.8).toFixed(2) } : null,
+                rightWrist: wR ? { x: +wR.x.toFixed(3), y: +wR.y.toFixed(3), z: +(wR.z || 0).toFixed(3), vis: +(wR.visibility || 0.8).toFixed(2) } : null,
+                leftHip: hL ? { x: +hL.x.toFixed(3), y: +hL.y.toFixed(3), z: +(hL.z || 0).toFixed(3), vis: +(hL.visibility || 0.8).toFixed(2) } : null,
+                rightHip: hR ? { x: +hR.x.toFixed(3), y: +hR.y.toFixed(3), z: +(hR.z || 0).toFixed(3), vis: +(hR.visibility || 0.8).toFixed(2) } : null,
+                leftKnee: kL ? { x: +kL.x.toFixed(3), y: +kL.y.toFixed(3), z: +(kL.z || 0).toFixed(3), vis: +(kL.visibility || 0.8).toFixed(2) } : null,
+                rightKnee: kR ? { x: +kR.x.toFixed(3), y: +kR.y.toFixed(3), z: +(kR.z || 0).toFixed(3), vis: +(kR.visibility || 0.8).toFixed(2) } : null,
+                leftAnkle: aL ? { x: +aL.x.toFixed(3), y: +aL.y.toFixed(3), z: +(aL.z || 0).toFixed(3), vis: +(aL.visibility || 0.8).toFixed(2) } : null,
+                rightAnkle: aR ? { x: +aR.x.toFixed(3), y: +aR.y.toFixed(3), z: +(aR.z || 0).toFixed(3), vis: +(aR.visibility || 0.8).toFixed(2) } : null
+              }
+            };
+
+            telemetryBufferRef.current.push(frameRecord);
+            if (telemetryBufferRef.current.length > 1000) {
+              telemetryBufferRef.current.shift();
+            }
+          } else {
+            setIsPoseDetected(false);
+          }
+
+          // Render minimal skeleton overlay (reads directly from active refs for solid 60fps)
+          if (showSkeletonRef.current && landmarksToDraw) {
+            try {
+              drawSkeletonOnCanvas(ctx, landmarksToDraw, {
+                showUserSkeleton: showUserSkeletonRef.current,
+                showGhostTarget: showGhostTargetRef.current,
+                showAdvancedOverlay: showAdvancedOverlayRef.current,
+                showDualExoskeleton: showGhostTargetRef.current && showAdvancedOverlayRef.current,
+                showAngles: showAdvancedOverlayRef.current,
+                showDepthHUD: showAdvancedOverlayRef.current,
+                isCalibrated: isCalibrated,
+                isMirrored: !isDemoStream && (facingModeRef.current === 'user'),
+                videoWidth: video?.videoWidth || 640,
+                videoHeight: video?.videoHeight || 480,
+                highlightedJoints,
+                exerciseId: exercise.id,
+                depthPercentage: depthPercentageRef.current,
+                currentAngle: depthTelemetryRef.current?.currentAngle ?? liveAngleRef.current,
+                targetAngle: depthTelemetryRef.current?.targetAngle ?? 90,
+                needToBend: depthTelemetryRef.current?.needToBend,
+                jointLabel: depthTelemetryRef.current?.jointLabel || (isSquatExercise ? 'Hip Depth' : 'Elbow'),
+                currentState: engineStateRef.current,
+                formStatus: formStatusRef.current
+              });
+            } catch (drawErr) {
+              console.warn('drawSkeletonOnCanvas render warning:', drawErr);
+            }
+          }
+        }
+      } catch (frameErr) {
+        console.warn('analyzeFrame processing warning:', frameErr);
+      } finally {
+        if (currentLoopId === loopIdRef.current) {
+          animFrameRef.current = requestAnimationFrame(analyzeFrame);
         }
       }
-
-      animFrameRef.current = requestAnimationFrame(analyzeFrame);
     };
 
     animFrameRef.current = requestAnimationFrame(analyzeFrame);
