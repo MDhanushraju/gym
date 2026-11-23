@@ -308,9 +308,9 @@ export class DualCameraClient {
   }
 
   /**
-   * Secondary action: Transmit local MediaPipe pose landmarks (throttled ~30fps, zero video)
+   * Secondary action: Transmit local MediaPipe pose landmarks and optional camera preview frame
    */
-  sendPoseTelemetry(landmarks, visibility, videoDimensions) {
+  sendPoseTelemetry(landmarks, visibility, videoDimensions, previewFrame = null) {
     if (this.role !== 'secondary' || !this.isConnected) return;
 
     const now = Date.now();
@@ -318,21 +318,27 @@ export class DualCameraClient {
     if (now - this.pendingTelemetryThrottle < 30) return;
     this.pendingTelemetryThrottle = now;
 
-    // Send minimal compact landmark array
-    const compactLandmarks = landmarks ? landmarks.map(lm => ({
+    // Send minimal compact landmark array (safely verify isArray)
+    const compactLandmarks = Array.isArray(landmarks) ? landmarks.map(lm => ({
       x: Math.round(lm.x * 1000) / 1000,
       y: Math.round(lm.y * 1000) / 1000,
       z: lm.z !== undefined ? Math.round(lm.z * 1000) / 1000 : 0,
       visibility: lm.visibility !== undefined ? Math.round(lm.visibility * 100) / 100 : 1
     })) : null;
 
-    this.send({
+    const payload = {
       type: 'pose_telemetry',
       timestampMs: now,
       videoDimensions,
       landmarks: compactLandmarks,
       visibility
-    });
+    };
+
+    if (previewFrame) {
+      payload.previewFrame = previewFrame;
+    }
+
+    this.send(payload);
   }
 }
 

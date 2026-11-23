@@ -289,7 +289,8 @@ async function handleClientMessage(ws, msg) {
           timestampMs: msg.timestampMs || Date.now(),
           videoDimensions: msg.videoDimensions || { w: 1280, h: 720 },
           landmarks: msg.landmarks || null,
-          visibility: msg.visibility !== undefined ? msg.visibility : 1
+          visibility: msg.visibility !== undefined ? msg.visibility : 1,
+          previewFrame: msg.previewFrame || null
         });
       } else if (ws.role === 'primary' && session.secondary) {
         safeSend(session.secondary, {

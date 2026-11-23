@@ -63,6 +63,7 @@ export default function LiveCoachSession({
   const showSecondaryPipRef = useRef(true);
   const secondaryCanvasRef = useRef(null);
   const lastSecondaryLandmarksRef = useRef(null);
+  const secondaryImageRef = useRef(null);
   const backChecklistRef = useRef(null);
 
   // Formanti State Machine & Repetition Telemetry
@@ -222,6 +223,7 @@ export default function LiveCoachSession({
         setIsSecondaryConnected(false);
         isSecondaryConnectedRef.current = false;
         lastSecondaryLandmarksRef.current = null;
+        secondaryImageRef.current = null;
         setSecondaryMetadata(null);
         poseSynchronizer.reset();
         voiceCoach.speak('Back camera disconnected. Continuing in front camera mode.');
@@ -254,6 +256,12 @@ export default function LiveCoachSession({
       poseSynchronizer.pushSecondaryFrame(msg);
       if (msg && msg.landmarks) {
         lastSecondaryLandmarksRef.current = msg.landmarks;
+      }
+      if (msg && msg.previewFrame) {
+        if (!secondaryImageRef.current) {
+          secondaryImageRef.current = new Image();
+        }
+        secondaryImageRef.current.src = msg.previewFrame;
       }
     });
 
@@ -918,7 +926,8 @@ export default function LiveCoachSession({
                   width: secCanvas.width,
                   height: secCanvas.height,
                   isSpineGood: curBackCheck?.spineNeutrality?.type !== 'warn',
-                  lateralTiltDeg: curBackCheck?.spineNeutrality?.lateralTiltDeg || '0°'
+                  lateralTiltDeg: curBackCheck?.spineNeutrality?.lateralTiltDeg || '0°',
+                  previewImage: secondaryImageRef.current
                 });
               }
             } catch (secPipErr) {

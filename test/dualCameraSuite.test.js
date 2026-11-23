@@ -362,6 +362,18 @@ await runWebSocketServerTests();
   const arcsDrawn = calls.filter(c => c[0] === 'arc').length;
   assert.ok(linesDrawn > 10, 'Must draw skeletal bone connections in PIP');
   assert.ok(arcsDrawn >= 10, 'Must draw joint dots and spinal anchors in PIP');
+
+  // 6C: Live camera preview frame drawing
+  calls.length = 0;
+  mockCtx.drawImage = (...args) => calls.push(['drawImage', ...args]);
+  const mockPreviewImg = { complete: true, naturalWidth: 160, naturalHeight: 120 };
+  drawSecondaryExoskeletonPIP(mockCtx, mockLandmarks, {
+    width: 240,
+    height: 160,
+    previewImage: mockPreviewImg
+  });
+  const hasDrawImage = calls.some(c => c[0] === 'drawImage');
+  assert.ok(hasDrawImage, 'Must render live camera video frame from Phone 2 when previewImage is present');
   console.log('✓ Test 6: Secondary Camera PIP exoskeleton rendering verified');
 }
 

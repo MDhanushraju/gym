@@ -34,6 +34,8 @@ export default function BackCameraNode({
   const animFrameRef = useRef(null);
   const facingModeRef = useRef('environment');
   const fpsTimerRef = useRef({ count: 0, lastTime: performance.now() });
+  const thumbnailCanvasRef = useRef(null);
+  const lastThumbnailTimeRef = useRef(0);
 
   // 1. Join session when code is confirmed
   const handleJoinSession = async (codeToJoin = sessionCodeInput) => {
@@ -224,37 +226,90 @@ export default function BackCameraNode({
             fpsTimerRef.current.lastTime = now;
           }
 
+          // Capture a lightweight compressed JPEG thumbnail (~4KB) at ~8-10 FPS for live screen sharing PIP
+          let previewFrame = null;
+          if (now - lastThumbnailTimeRef.current >= 120 && video.videoWidth && video.videoHeight) {
+            lastThumbnailTimeRef.current = now;
+            try {
+              if (!thumbnailCanvasRef.current) {
+                thumbnailCanvasRef.current = document.createElement('canvas');
+                thumbnailCanvasRef.current.width = 160;
+                thumbnailCanvasRef.current.height = 120;
+              }
+              const tCanvas = thumbnailCanvasRef.current;
+              const tCtx = tCanvas.getContext('2d');
+              tCtx.drawImage(video, 0, 0, tCanvas.width, tCanvas.height);
+              previewFrame = tCanvas.toDataURL('image/jpeg', 0.4);
+            } catch (snapErr) {
+              // Ignore cross-origin or canvas read errors
+            }
+          }
+
           if (isLandmarkerReady()) {
             const timestamp = performance.now();
             const result = detectPoseForVideoFrame(video, timestamp);
 
-            if (result && result.landmarks && result.landmarks.length > 0) {
-              const rawLandmarks = result.landmarks[0];
-              setIsPoseDetected(true);
+            if (result && result.landmarks) {
+              // detectPoseForVideoFrame returns landmarks array directly; extract 33 landmarks safely
+              const rawLandmarks = Array.isArray(result.landmarks[0])
+                ? result.landmarks[0]
+                : (Array.isArray(result.landmarks) ? result.landmarks : null);
 
-              // Transmit minimal landmark telemetry to primary device via WebSocket
-              dualCameraClient.sendPoseTelemetry(
-                rawLandmarks,
-                1.0,
-                { w: video.videoWidth || 1280, h: video.videoHeight || 720 }
-              );
+              if (rawLandmarks && rawLandmarks.length > 0) {
+                setIsPoseDetected(true);
 
-              // Render skeleton overlay on back camera view
-              try {
-                drawSkeletonOnCanvas(ctx, rawLandmarks, {
-                  showUserSkeleton: true,
-                  showGhostTarget: false,
-                  isMirrored: facingModeRef.current === 'user',
-                  videoWidth: video.videoWidth || 640,
-                  videoHeight: video.videoHeight || 480,
-                  exerciseId: 'basic-squats'
-                });
-              } catch (drawErr) {
-                console.warn('Back camera skeleton draw warning:', drawErr);
+                // Transmit landmark telemetry + live video thumbnail to primary device via WebSocket
+                dualCameraClient.sendPoseTelemetry(
+                  rawLandmarks,
+                  1.0,
+                  { w: video.videoWidth || 1280, h: video.videoHeight || 720 },
+                  previewFrame
+                );
+
+                // Render skeleton overlay on back camera view
+                try {
+                  drawSkeletonOnCanvas(ctx, rawLandmarks, {
+                    showUserSkeleton: true,
+                    showGhostTarget: false,
+                    isMirrored: facingModeRef.current === 'user',
+                    videoWidth: video.videoWidth || 640,
+                    videoHeight: video.videoHeight || 480,
+                    exerciseId: 'basic-squats'
+                  });
+                } catch (drawErr) {
+                  console.warn('Back camera skeleton draw warning:', drawErr);
+                }
+              } else {
+                setIsPoseDetected(false);
+                if (previewFrame) {
+                  dualCameraClient.sendPoseTelemetry(
+                    null,
+                    0,
+                    { w: video.videoWidth || 1280, h: video.videoHeight || 720 },
+                    previewFrame
+                  );
+                }
               }
             } else {
               setIsPoseDetected(false);
+              // Send camera thumbnail even before user is detected so primary screen sees the live camera feed
+              if (previewFrame) {
+                dualCameraClient.sendPoseTelemetry(
+                  null,
+                  0,
+                  { w: video.videoWidth || 1280, h: video.videoHeight || 720 },
+                  previewFrame
+                );
+              }
             }
+          } else if (previewFrame) {
+            // Still stream camera preview while MediaPipe is warming up
+            dualCameraClient.sendPoseTelemetry(
+              null,
+              0,
+              { w: video.videoWidth || 1280, h: video.videoHeight || 720 },
+              previewFrame
+            );
           }
         }
       } catch (err) {

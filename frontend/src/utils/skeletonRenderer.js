@@ -584,34 +584,49 @@ export function drawSecondaryExoskeletonPIP(ctx, landmarks, options = {}) {
   const width = options.width || canvas?.width || 260;
   const height = options.height || canvas?.height || 160;
 
-  // 1. Draw Obsidian / Cybernetic Athletic Background
+  // 1. Draw live camera preview if available, otherwise dark obsidian cybernetic grid
   ctx.clearRect(0, 0, width, height);
 
-  const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, '#0F172A'); // Slate-900
-  grad.addColorStop(1, '#020617'); // Slate-950
-  ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, width, height);
+  const previewImg = options.previewImage;
+  const hasLivePreview = previewImg && previewImg.complete && previewImg.naturalWidth > 0;
 
-  // Subtle crosshair grid
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
-  ctx.lineWidth = 1;
-  const gridSize = 24;
-  for (let x = gridSize; x < width; x += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(x, 0);
-    ctx.lineTo(x, height);
-    ctx.stroke();
-  }
-  for (let y = gridSize; y < height; y += gridSize) {
-    ctx.beginPath();
-    ctx.moveTo(0, y);
-    ctx.lineTo(width, y);
-    ctx.stroke();
+  if (hasLivePreview) {
+    try {
+      ctx.drawImage(previewImg, 0, 0, width, height);
+      // Subtle darkening overlay so the skeleton pops with high contrast
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
+      ctx.fillRect(0, 0, width, height);
+    } catch (e) {
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(0, 0, width, height);
+    }
+  } else {
+    const grad = ctx.createLinearGradient(0, 0, 0, height);
+    grad.addColorStop(0, '#0F172A'); // Slate-900
+    grad.addColorStop(1, '#020617'); // Slate-950
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, width, height);
+
+    // Subtle crosshair grid
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.04)';
+    ctx.lineWidth = 1;
+    const gridSize = 24;
+    for (let x = gridSize; x < width; x += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(x, 0);
+      ctx.lineTo(x, height);
+      ctx.stroke();
+    }
+    for (let y = gridSize; y < height; y += gridSize) {
+      ctx.beginPath();
+      ctx.moveTo(0, y);
+      ctx.lineTo(width, y);
+      ctx.stroke();
+    }
   }
 
   // Central Vertical Reference Guideline (Plumb line for spinal vertical alignment)
-  ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+  ctx.strokeStyle = hasLivePreview ? 'rgba(56, 189, 248, 0.4)' : 'rgba(56, 189, 248, 0.25)';
   ctx.setLineDash([3, 3]);
   ctx.beginPath();
   ctx.moveTo(width / 2, 8);
@@ -621,14 +636,22 @@ export function drawSecondaryExoskeletonPIP(ctx, landmarks, options = {}) {
 
   // Empty state if no landmarks yet
   if (!landmarks || landmarks.length === 0) {
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
-    ctx.font = 'bold 11px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('Awaiting Back-View Pose...', width / 2, height / 2 - 8);
-    ctx.font = '9px sans-serif';
-    ctx.fillStyle = 'rgba(148, 163, 184, 0.4)';
-    ctx.fillText('Position Phone #2 behind you', width / 2, height / 2 + 10);
+    if (!hasLivePreview) {
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.65)';
+      ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Awaiting Back-View Pose...', width / 2, height / 2 - 8);
+      ctx.font = '9px sans-serif';
+      ctx.fillStyle = 'rgba(148, 163, 184, 0.4)';
+      ctx.fillText('Position Phone #2 behind you', width / 2, height / 2 + 10);
+    } else {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('Step into back camera view', width / 2, height - 20);
+    }
     return;
   }
 
