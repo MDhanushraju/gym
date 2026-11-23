@@ -258,10 +258,13 @@ export default function LiveCoachSession({
         lastSecondaryLandmarksRef.current = msg.landmarks;
       }
       if (msg && msg.previewFrame) {
-        if (!secondaryImageRef.current) {
-          secondaryImageRef.current = new Image();
-        }
-        secondaryImageRef.current.src = msg.previewFrame;
+        // Atomic decode swap: decode in a background image and swap reference only once fully loaded
+        // This prevents flickering and ensures complete === true when drawSecondaryExoskeletonPIP renders
+        const nextImg = new Image();
+        nextImg.onload = () => {
+          secondaryImageRef.current = nextImg;
+        };
+        nextImg.src = msg.previewFrame;
       }
     });
 

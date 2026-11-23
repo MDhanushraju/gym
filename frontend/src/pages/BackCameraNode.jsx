@@ -119,9 +119,10 @@ export default function BackCameraNode({
           await videoRef.current.play();
         } catch (e) {}
 
-        await initPoseLandmarker().catch(() => {});
+        // Activate camera immediately so preview thumbnails begin streaming to Phone #1 without delay
         setIsCameraActive(true);
         setIsLoadingCamera(false);
+        initPoseLandmarker().catch(() => {});
       }
     } catch (err) {
       console.warn('Back camera error:', err);
@@ -226,9 +227,11 @@ export default function BackCameraNode({
             fpsTimerRef.current.lastTime = now;
           }
 
-          // Capture a lightweight compressed JPEG thumbnail (~4KB) at ~8-10 FPS for live screen sharing PIP
+          // Capture a lightweight compressed JPEG thumbnail (~4KB) at ~10 FPS for live screen sharing PIP
           let previewFrame = null;
-          if (now - lastThumbnailTimeRef.current >= 120 && video.videoWidth && video.videoHeight) {
+          const vw = video.videoWidth || video.clientWidth || 640;
+          const vh = video.videoHeight || video.clientHeight || 480;
+          if (now - lastThumbnailTimeRef.current >= 100 && vw > 0 && vh > 0) {
             lastThumbnailTimeRef.current = now;
             try {
               if (!thumbnailCanvasRef.current) {
@@ -262,7 +265,7 @@ export default function BackCameraNode({
                 dualCameraClient.sendPoseTelemetry(
                   rawLandmarks,
                   1.0,
-                  { w: video.videoWidth || 1280, h: video.videoHeight || 720 },
+                  { w: vw, h: vh },
                   previewFrame
                 );
 
@@ -272,8 +275,8 @@ export default function BackCameraNode({
                     showUserSkeleton: true,
                     showGhostTarget: false,
                     isMirrored: facingModeRef.current === 'user',
-                    videoWidth: video.videoWidth || 640,
-                    videoHeight: video.videoHeight || 480,
+                    videoWidth: vw,
+                    videoHeight: vh,
                     exerciseId: 'basic-squats'
                   });
                 } catch (drawErr) {
@@ -285,7 +288,7 @@ export default function BackCameraNode({
                   dualCameraClient.sendPoseTelemetry(
                     null,
                     0,
-                    { w: video.videoWidth || 1280, h: video.videoHeight || 720 },
+                    { w: vw, h: vh },
                     previewFrame
                   );
                 }
@@ -297,7 +300,7 @@ export default function BackCameraNode({
                 dualCameraClient.sendPoseTelemetry(
                   null,
                   0,
-                  { w: video.videoWidth || 1280, h: video.videoHeight || 720 },
+                  { w: vw, h: vh },
                   previewFrame
                 );
               }
@@ -307,7 +310,7 @@ export default function BackCameraNode({
             dualCameraClient.sendPoseTelemetry(
               null,
               0,
-              { w: video.videoWidth || 1280, h: video.videoHeight || 720 },
+              { w: vw, h: vh },
               previewFrame
             );
           }

@@ -588,7 +588,7 @@ export function drawSecondaryExoskeletonPIP(ctx, landmarks, options = {}) {
   ctx.clearRect(0, 0, width, height);
 
   const previewImg = options.previewImage;
-  const hasLivePreview = previewImg && previewImg.complete && previewImg.naturalWidth > 0;
+  const hasLivePreview = previewImg && (previewImg.complete || previewImg.width > 0) && (previewImg.naturalWidth > 0 || previewImg.width > 0);
 
   if (hasLivePreview) {
     try {
